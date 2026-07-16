@@ -23,9 +23,18 @@
 }
 
 @layer base {
+  *, *::before, *::after {
+    @apply transition-colors duration-300;
+  }
   body {
-    @apply bg-[var(--background)] text-[var(--foreground)] antialiased transition-colors duration-300;
+    @apply bg-[var(--background)] text-[var(--foreground)] antialiased;
     font-family: 'Inter', sans-serif;
+  }
+  
+  /* Fix native calendar icon visibility in dark mode */
+  .dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) brightness(0.8);
+    cursor: pointer;
   }
 }
 
@@ -51,5 +60,13 @@
   .gradient-bg {
     @apply absolute inset-0 -z-10 h-full w-full bg-[var(--background)] 
            bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,var(--accent-glow),rgba(255,255,255,0))] pointer-events-none;
+  }
+}
+
+@layer utilities {
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
   }
 }

@@ -3,74 +3,264 @@ import {
   Menu, 
   Search, 
   Bell, 
-  LayoutDashboard, 
   CheckSquare, 
-  BarChart2, 
   Settings, 
   X,
-  Plus 
+  Plus,
+  Trash2,
+  Edit2,
+  Calendar,
+  Tag,
+  AlertCircle,
+  CheckCircle,
+  Circle,
+  BarChart2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { subscribeToTodos, addTodo, updateTodo, type Todo } from '../lib/firestore';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from 'react-router-dom';
+import { ThemeToggle } from '../components/ThemeToggle';
+import { AIAssistant } from '../components/AIAssistant';
+import toast from 'react-hot-toast';
+
+interface Task {
+  id: string;
+  title: string;
+  description: string;
+  priority: 'low' | 'medium' | 'high';
+  category: string;
+  dueDate: string;
+  completed: boolean;
+}
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { currentUser, logout } = useAuth();
-  const [todos, setTodos] = useState<Todo[]>([]);
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [isAdding, setIsAdding] = useState(false);
+  
+  // Local State
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    try {
+      const saved = localStorage.getItem('genz_tasks');
+      return saved ? JSON.parse(saved) : [];
+    } catch (error) {
+      console.error('Failed to load tasks:', error);
+      return [];
+    }
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Persist Tasks
+  useEffect(() => {
+    try {
+      localStorage.setItem('genz_tasks', JSON.stringify(tasks));
+    } catch (error) {
+      console.error('Failed to save tasks:', error);
+    }
+  }, [tasks]);
+  
+  // Listen for tasks updates from Settings (Import/Clear All)
+  useEffect(() => {
+    const handleSync = () => {
+      try {
+        const saved = localStorage.getItem('genz_tasks');
+        setTasks(saved ? JSON.parse(saved) : []);
+      } catch (error) {
+        console.error('Failed to sync tasks:', error);
+      }
+    };
+    window.addEventListener('tasks_updated', handleSync);
+    return () => window.removeEventListener('tasks_updated', handleSync);
+  }, []);
+
+  // Form State
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [avatar, setAvatar] = useState(() => localStorage.getItem('genz_user_avatar') || '');
 
   useEffect(() => {
-    if (!currentUser) return;
-    const unsubscribe = subscribeToTodos(currentUser.uid, (fetchedTodos) => {
-      setTodos(fetchedTodos);
-    });
-    return () => unsubscribe();
-  }, [currentUser]);
+    const handleAvatarSync = () => setAvatar(localStorage.getItem('genz_user_avatar') || '');
+    window.addEventListener('avatar_updated', handleAvatarSync);
+    return () => window.removeEventListener('avatar_updated', handleAvatarSync);
+  }, []);
+  
+  // Form Fields
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
+  const [category, setCategory] = useState('Personal');
+  const [dueDate, setDueDate] = useState('');
 
-  const handleAddTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTaskTitle.trim() || !currentUser) return;
-    try {
-      await addTodo({
-        title: newTaskTitle.trim(),
-        completed: false,
-        priority: 'medium',
-        userId: currentUser.uid,
-      });
-      setNewTaskTitle('');
-      setIsAdding(false);
-    } catch (error) {
-      console.error(error);
+  // Category Tabs
+  const [activeCategory, setActiveCategory] = useState<string>('All');
+  const [customCategories, setCustomCategories] = useState<string[]>(() => {
+    const saved = localStorage.getItem('genz_custom_categories');
+    return saved ? JSON.parse(saved) : ['Personal', 'Work', 'Technical Work', 'Long Term Goal'];
+  });
+  
+  const allCategoriesMap = new Map<string, string>();
+  customCategories.forEach(c => allCategoriesMap.set(c.toLowerCase(), c));
+  tasks.forEach(t => {
+    if (t.category && !allCategoriesMap.has(t.category.toLowerCase())) {
+      const niceCase = t.category.charAt(0).toUpperCase() + t.category.slice(1);
+      allCategoriesMap.set(t.category.toLowerCase(), niceCase);
+    }
+  });
+  const categories = ['All', ...Array.from(allCategoriesMap.values())];
+
+  const handleAddCategory = () => {
+    const newCat = window.prompt('Enter new category name:');
+    if (newCat && newCat.trim()) {
+      const trimmed = newCat.trim();
+      const existing = categories.find(c => c.toLowerCase() === trimmed.toLowerCase());
+      if (!existing) {
+        const updated = [...customCategories, trimmed];
+        setCustomCategories(updated);
+        localStorage.setItem('genz_custom_categories', JSON.stringify(updated));
+        setActiveCategory(trimmed);
+      } else {
+        setActiveCategory(existing);
+      }
     }
   };
 
-  const toggleTodo = async (todo: Todo) => {
-    if (!todo.id) return;
-    await updateTodo(todo.id, { completed: !todo.completed });
+  // Search & Filter
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dateFilter, setDateFilter] = useState<'All Time' | 'Today' | 'Upcoming' | 'Past Due'>('All Time');
+
+  // Notifications
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [hasUnread, setHasUnread] = useState(() => {
+    return localStorage.getItem('genz_notifications_read') !== 'true';
+  });
+  const notifications = [
+    { id: 1, title: 'Welcome to GenZ To-Do!', time: 'Just now', read: false },
+    { id: 2, title: 'Complete your pending tasks today.', time: '2 hours ago', read: false },
+  ];
+
+  // Simulate loading state
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const resetForm = () => {
+    setTitle('');
+    setDescription('');
+    setPriority('medium');
+    setCategory('');
+    setDueDate('');
+    setEditingTask(null);
+    setIsFormOpen(false);
   };
 
-  // Stats calculation
-  const totalTasks = todos.length;
-  const completedTasks = todos.filter(t => t.completed).length;
-  const inProgressTasks = totalTasks - completedTasks;
+  const handleOpenForm = (task?: Task) => {
+    if (task) {
+      setEditingTask(task);
+      setTitle(task.title);
+      setDescription(task.description);
+      setPriority(task.priority);
+      setCategory(task.category);
+      setDueDate(task.dueDate);
+    } else {
+      resetForm();
+    }
+    setIsFormOpen(true);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+
+    if (editingTask) {
+      setTasks(tasks.map(t => t.id === editingTask.id ? {
+        ...t, title, description, priority, category, dueDate
+      } : t));
+      toast.success('Task updated successfully!');
+    } else {
+      const newTask: Task = {
+        id: Date.now().toString(),
+        title,
+        description,
+        priority,
+        category,
+        dueDate,
+        completed: false,
+      };
+      setTasks([newTask, ...tasks]);
+      toast.success('Task created successfully! 🚀');
+    }
+    resetForm();
+  };
+
+  const handleDelete = (id: string) => {
+    setTasks(tasks.filter(t => t.id !== id));
+    toast.success('Task deleted');
+  };
+
+  const toggleComplete = (id: string) => {
+    setTasks(tasks.map(t => {
+      if (t.id === id) {
+        if (!t.completed) toast.success('Task completed! 🎉');
+        return { ...t, completed: !t.completed };
+      }
+      return t;
+    }));
+  };
+
+  const priorityWeight: Record<string, number> = { high: 3, medium: 2, low: 1 };
+  
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  const filteredTasks = tasks
+    .filter(t => activeCategory === 'All' || t.category?.toLowerCase() === activeCategory.toLowerCase())
+    .filter(t => 
+      t.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      t.description.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .filter(t => {
+      if (dateFilter === 'All Time') return true;
+      if (!t.dueDate) return false;
+      if (dateFilter === 'Today') return t.dueDate === todayStr;
+      if (dateFilter === 'Upcoming') return t.dueDate > todayStr;
+      if (dateFilter === 'Past Due') return t.dueDate < todayStr && !t.completed;
+      return true;
+    })
+    .sort((a, b) => {
+      if (a.completed !== b.completed) return a.completed ? 1 : -1;
+      return priorityWeight[b.priority] - priorityWeight[a.priority];
+    });
+
+  const getPriorityColor = (p: string) => {
+    switch(p) {
+      case 'high': return 'text-red-500 bg-red-500/10 border-red-500/20';
+      case 'medium': return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20';
+      case 'low': return 'text-green-500 bg-green-500/10 border-green-500/20';
+      default: return 'text-gray-500 bg-gray-500/10 border-gray-500/20';
+    }
+  };
 
   const navItems = [
-    { name: 'Dashboard', icon: LayoutDashboard, active: true },
-    { name: 'Tasks', icon: CheckSquare, active: false },
-    { name: 'Analytics', icon: BarChart2, active: false },
-    { name: 'Settings', icon: Settings, active: false },
+    { name: 'Tasks', icon: CheckSquare, active: true, path: '/dashboard' },
+    { name: 'Analytics', icon: BarChart2, active: false, path: '/analytics' },
+    { name: 'Settings', icon: Settings, active: false, path: '/settings' },
   ];
 
   return (
     <div className="min-h-screen bg-[var(--background)] flex overflow-hidden">
       {/* Mobile Sidebar Overlay */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden transition-opacity"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Sidebar */}
       <aside 
@@ -79,7 +269,6 @@ export default function Dashboard() {
         }`}
       >
         <div className="h-full flex flex-col">
-          {/* Sidebar Header */}
           <div className="h-16 flex items-center justify-between px-6 border-b border-[var(--card-border)]">
             <span className="text-xl font-bold gradient-text tracking-wider">GenZ To-Do</span>
             <button 
@@ -90,14 +279,13 @@ export default function Dashboard() {
             </button>
           </div>
 
-          {/* Navigation Links */}
           <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
-                <a
+                <Link
                   key={item.name}
-                  href="#"
+                  to={item.path}
                   className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                     item.active 
                       ? 'bg-gradient-to-r from-violet-600/10 to-indigo-600/10 text-violet-600 dark:text-violet-400 font-medium' 
@@ -106,16 +294,19 @@ export default function Dashboard() {
                 >
                   <Icon size={20} className={item.active ? 'text-violet-600 dark:text-violet-400' : 'text-gray-500 dark:text-gray-400'} />
                   <span>{item.name}</span>
-                </a>
+                </Link>
               );
             })}
           </nav>
 
-          {/* User Profile Summary (Sidebar Bottom) */}
           <div className="p-4 border-t border-[var(--card-border)]">
             <div className="flex items-center space-x-3 p-2 rounded-xl hover:bg-[var(--card-bg)] transition-colors cursor-pointer">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white font-bold uppercase">
-                {currentUser?.email?.charAt(0) || 'U'}
+              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white font-bold uppercase overflow-hidden">
+                {avatar ? (
+                  <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  currentUser?.email?.charAt(0) || 'U'
+                )}
               </div>
               <div className="flex-1 overflow-hidden">
                 <p className="text-sm font-medium text-[var(--foreground)] truncate">{currentUser?.email}</p>
@@ -127,7 +318,7 @@ export default function Dashboard() {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {/* Top Navbar */}
         <header className="h-16 glass-card rounded-none border-b border-[var(--card-border)] flex items-center justify-between px-4 sm:px-6 z-30 sticky top-0">
           <div className="flex items-center">
@@ -137,142 +328,376 @@ export default function Dashboard() {
             >
               <Menu size={24} />
             </button>
-            <h1 className="text-xl font-bold gradient-text hidden sm:block">Dashboard</h1>
+            <h1 className="text-xl font-bold gradient-text hidden sm:block">Task Management</h1>
           </div>
 
-          <div className="flex items-center space-x-2 sm:space-x-4">
-            {/* Search */}
-            <div className="hidden md:flex relative group">
+          <div className="flex items-center space-x-4">
+            <div className="relative group hidden sm:block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input 
                 type="text" 
-                placeholder="Search..." 
-                className="bg-[var(--background)] border border-[var(--card-border)] text-[var(--foreground)] pl-10 pr-4 py-2 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all duration-300 w-64 focus:w-80"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search tasks..." 
+                className="bg-[var(--background)] border border-[var(--card-border)] text-[var(--foreground)] pl-10 pr-4 py-2 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all duration-300 w-48 lg:w-64 focus:w-72"
               />
             </div>
             
-            <button className="md:hidden p-2 rounded-full hover:bg-[var(--card-bg)] text-gray-600 dark:text-gray-300">
-              <Search size={20} />
-            </button>
+            {/* Notification Dropdown */}
+            <div className="relative">
+              <button 
+                onClick={() => {
+                  setIsNotificationOpen(!isNotificationOpen);
+                  if (!isNotificationOpen) {
+                    setHasUnread(false);
+                    localStorage.setItem('genz_notifications_read', 'true');
+                  }
+                }}
+                className="relative p-2 rounded-full hover:bg-[var(--card-bg)] text-gray-600 dark:text-gray-300 transition-colors"
+              >
+                <Bell size={20} />
+                {hasUnread && (
+                  <>
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-ping"></span>
+                    <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                  </>
+                )}
+              </button>
+              <AnimatePresence>
+                {isNotificationOpen && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }} 
+                    animate={{ opacity: 1, y: 0, scale: 1 }} 
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute right-0 mt-2 w-72 glass-card rounded-2xl shadow-2xl border border-[var(--card-border)] overflow-hidden z-50 origin-top-right"
+                  >
+                    <div className="p-4 border-b border-[var(--card-border)]">
+                      <h3 className="font-semibold text-[var(--foreground)]">Notifications</h3>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      {notifications.map(n => (
+                        <div key={n.id} className="p-4 border-b border-[var(--card-border)] hover:bg-[var(--card-bg)] cursor-pointer transition-colors">
+                          <p className="text-sm font-medium text-[var(--foreground)]">{n.title}</p>
+                          <p className="text-xs text-gray-500 mt-1">{n.time}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
 
-            {/* Notification */}
-            <button className="relative p-2 rounded-full hover:bg-[var(--card-bg)] text-gray-600 dark:text-gray-300 transition-colors">
-              <Bell size={20} />
-              <span className="absolute top-1 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-[var(--background)]"></span>
-            </button>
-
-            {/* Profile Dropdown Trigger */}
-            <button className="p-1 rounded-full hover:bg-[var(--card-bg)] transition-colors uppercase">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-md">
-                {currentUser?.email?.charAt(0) || 'U'}
-              </div>
-            </button>
+            <ThemeToggle />
           </div>
         </header>
 
         {/* Dashboard Content Area */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          <div className="max-w-6xl mx-auto space-y-6">
-            
-            {/* Greeting */}
+          <div className="max-w-5xl mx-auto space-y-6">
+
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
-                <h2 className="text-2xl font-bold text-[var(--foreground)]">Welcome back! 👋</h2>
-                <p className="text-gray-500 dark:text-gray-400 mt-1">Here is what's happening with your tasks today.</p>
+                <h2 className="text-2xl font-bold text-[var(--foreground)]">Your Tasks</h2>
+                <p className="text-gray-500 dark:text-gray-400 mt-1">Manage and organize your day.</p>
               </div>
-              <button 
-                onClick={() => setIsAdding(!isAdding)}
-                className="primary-button flex items-center space-x-2 whitespace-nowrap"
+              <div className="flex items-center space-x-3 w-full sm:w-auto">
+                <select 
+                  value={dateFilter}
+                  onChange={(e: any) => setDateFilter(e.target.value)}
+                  className="bg-[var(--background)] border border-[var(--card-border)] text-sm px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 text-[var(--foreground)]"
+                >
+                  <option value="All Time">All Time</option>
+                  <option value="Today">Today</option>
+                  <option value="Upcoming">Upcoming</option>
+                  <option value="Past Due">Past Due</option>
+                </select>
+                <button 
+                  onClick={() => handleOpenForm()}
+                  className="primary-button flex items-center justify-center flex-1 sm:flex-none space-x-2 whitespace-nowrap shadow-lg shadow-violet-500/20"
+                >
+                  <Plus size={18} />
+                  <span>Add Task</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Category Navigation Bar */}
+            <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-hide">
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setActiveCategory(cat)}
+                  className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all ${
+                    activeCategory === cat 
+                      ? 'bg-violet-500 text-white shadow-md shadow-violet-500/30'
+                      : 'bg-[var(--card-bg)] text-gray-500 hover:bg-violet-500/10 hover:text-violet-500 border border-[var(--card-border)]'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+              <button
+                onClick={handleAddCategory}
+                className="px-3 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all bg-[var(--card-bg)] text-gray-500 hover:bg-violet-500/10 hover:text-violet-500 border border-dashed border-gray-400 dark:border-gray-600 hover:border-violet-500 flex items-center justify-center flex-shrink-0"
+                title="Add Category"
               >
-                <Plus size={18} />
-                <span>New Task</span>
+                <Plus size={16} />
               </button>
             </div>
 
-            {/* Mock Data Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {[
-                { label: 'Total Tasks', value: totalTasks, color: 'from-blue-500 to-cyan-500' },
-                { label: 'Completed', value: completedTasks, color: 'from-green-500 to-emerald-500' },
-                { label: 'In Progress', value: inProgressTasks, color: 'from-orange-500 to-yellow-500' },
-              ].map((stat, idx) => (
-                <div key={idx} className="glass-card p-6 flex flex-col justify-center relative overflow-hidden group">
-                  <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${stat.color} opacity-10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500`}></div>
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1 z-10">{stat.label}</p>
-                  <p className="text-3xl font-bold text-[var(--foreground)] z-10">{stat.value}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Mock Chart & Recent Tasks Area */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
-              {/* Main Chart Area */}
-              <div className="lg:col-span-2 glass-card p-6 min-h-[300px] flex flex-col">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-[var(--foreground)]">Activity Overview</h3>
-                  <select className="bg-[var(--background)] border border-[var(--card-border)] text-sm rounded-lg px-3 py-1 outline-none text-[var(--foreground)]">
-                    <option>This Week</option>
-                    <option>This Month</option>
-                    <option>This Year</option>
-                  </select>
-                </div>
-                <div className="flex-1 border-2 border-dashed border-[var(--card-border)] rounded-xl flex flex-col items-center justify-center text-gray-400 bg-black/5 dark:bg-white/5">
-                  <BarChart2 size={32} className="mb-2 opacity-50" />
-                  <span className="text-sm font-medium">Chart Visualization Placeholder</span>
-                  <span className="text-xs opacity-75">Analytics data will appear here</span>
-                </div>
-              </div>
-
-              {/* Recent Tasks List */}
-              <div className="glass-card p-6 flex flex-col">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-[var(--foreground)]">Your Tasks</h3>
-                  <span className="text-sm text-violet-600 dark:text-violet-400">{todos.length} Tasks</span>
-                </div>
-                
-                {isAdding && (
-                  <form onSubmit={handleAddTask} className="mb-4">
-                    <input 
-                      type="text" 
-                      autoFocus
-                      value={newTaskTitle}
-                      onChange={(e) => setNewTaskTitle(e.target.value)}
-                      placeholder="What needs to be done?" 
-                      className="w-full bg-[var(--background)] border border-violet-500/30 text-[var(--foreground)] px-4 py-2 rounded-lg text-sm focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all"
-                    />
-                  </form>
-                )}
-
-                <div className="flex-1 space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                  {todos.length === 0 && !isAdding ? (
-                    <p className="text-sm text-gray-500 text-center py-4">No tasks yet. Create one!</p>
-                  ) : (
-                    todos.map((task) => (
-                      <div 
-                        key={task.id} 
-                        onClick={() => toggleTodo(task)}
-                        className="flex items-start gap-3 p-3 rounded-lg hover:bg-[var(--card-bg)] transition-colors cursor-pointer border border-transparent hover:border-[var(--card-border)]"
-                      >
-                        <div className={`mt-1 flex-shrink-0 w-4 h-4 rounded-full border-2 transition-colors ${task.completed ? 'border-green-500 bg-green-500' : 'border-violet-500'}`}></div>
-                        <div>
-                          <p className={`text-sm font-medium transition-all ${task.completed ? 'text-gray-500 line-through opacity-70' : 'text-[var(--foreground)]'}`}>
-                            {task.title}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {task.createdAt ? new Date(task.createdAt?.toDate?.() || task.createdAt).toLocaleDateString() : 'Just now'}
-                          </p>
-                        </div>
+            {/* Content Container */}
+            <div className="glass-card p-6 min-h-[400px]">
+              {isLoading ? (
+                /* Loading State */
+                <div className="space-y-4">
+                  {[1, 2, 3, 4].map((i) => (
+                    <motion.div 
+                      key={i} 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.1 }}
+                      className="flex items-center p-4 border border-[var(--card-border)] rounded-xl relative overflow-hidden bg-[var(--card-bg)]"
+                    >
+                      <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-black/5 to-transparent dark:via-white/5" />
+                      <div className="w-5 h-5 rounded-full bg-gray-200/50 dark:bg-gray-700/50 mr-4 animate-pulse"></div>
+                      <div className="flex-1 space-y-3">
+                        <div className="h-4 bg-gray-200/50 dark:bg-gray-700/50 rounded-md w-1/3 animate-pulse"></div>
+                        <div className="h-3 bg-gray-200/50 dark:bg-gray-700/50 rounded-md w-1/2 animate-pulse"></div>
                       </div>
-                    ))
-                  )}
+                    </motion.div>
+                  ))}
                 </div>
-              </div>
+              ) : filteredTasks.length === 0 ? (
+                /* Empty State */
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.4, type: 'spring', bounce: 0.5 }}
+                  className="flex flex-col items-center justify-center py-16 text-center"
+                >
+                  <motion.div 
+                    animate={{ y: [-5, 5, -5] }}
+                    transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                    className="relative w-32 h-32 mb-8"
+                  >
+                    <div className="absolute inset-0 bg-violet-500/20 rounded-full blur-2xl animate-pulse" />
+                    <div className="relative w-full h-full rounded-full bg-gradient-to-tr from-violet-100 to-indigo-50 dark:from-violet-900/40 dark:to-indigo-900/40 flex items-center justify-center shadow-inner border border-white/50 dark:border-white/10">
+                      <CheckSquare size={56} className="text-violet-500 dark:text-violet-400" strokeWidth={1.5} />
+                    </div>
+                  </motion.div>
+                  <h3 className="text-2xl font-bold gradient-text mb-3 tracking-tight">No tasks found</h3>
+                  <p className="text-gray-500 dark:text-gray-400 max-w-sm mb-8 text-lg">
+                    {searchQuery ? 'Try adjusting your search criteria.' : 'You have a clean slate! Add a new task to get started.'}
+                  </p>
+                  {!searchQuery && (
+                    <motion.button 
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => handleOpenForm()}
+                      className="primary-button flex items-center shadow-lg shadow-violet-500/25"
+                    >
+                      <Plus size={20} className="mr-2" /> Create your first task
+                    </motion.button>
+                  )}
+                </motion.div>
+              ) : (
+                /* Task List */
+                <motion.div layout className="space-y-3">
+                  <AnimatePresence mode="popLayout">
+                    {filteredTasks.map((task) => (
+                      <motion.div
+                        layout
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        key={task.id}
+                        className={`group p-4 rounded-xl border transition-all duration-300 flex flex-col sm:flex-row gap-4 sm:items-center ${
+                          task.completed 
+                            ? 'bg-gray-50/50 dark:bg-gray-900/20 border-transparent opacity-75' 
+                            : 'bg-[var(--background)] border-[var(--card-border)] hover:border-violet-500/30 hover:shadow-xl hover:shadow-violet-500/10 hover:-translate-y-0.5'
+                        }`}
+                      >
+                        <div className="flex-1 flex items-start sm:items-center gap-4 min-w-0">
+                          <button 
+                            onClick={() => toggleComplete(task.id)}
+                            className="mt-1 sm:mt-0 flex-shrink-0 text-gray-400 hover:text-violet-500 transition-colors"
+                          >
+                            {task.completed ? (
+                              <CheckCircle className="text-green-500" size={22} />
+                            ) : (
+                              <Circle size={22} />
+                            )}
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <h4 className={`font-semibold text-lg truncate transition-all ${
+                              task.completed ? 'line-through text-gray-500' : 'text-[var(--foreground)]'
+                            }`}>
+                              {task.title}
+                            </h4>
+                            {task.description && (
+                              <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mt-1">
+                                {task.description}
+                              </p>
+                            )}
+                            
+                            <div className="flex flex-wrap items-center gap-3 mt-3">
+                              {task.dueDate && (
+                                <div className="flex items-center text-xs text-gray-500">
+                                  <Calendar size={12} className="mr-1" />
+                                  {new Date(task.dueDate).toLocaleDateString()}
+                                </div>
+                              )}
+                              {task.category && (
+                                <div className="flex items-center text-xs text-gray-500">
+                                  <Tag size={12} className="mr-1" />
+                                  {task.category}
+                                </div>
+                              )}
+                              <div className={`text-xs px-2 py-0.5 rounded-full border flex items-center font-medium capitalize ${getPriorityColor(task.priority)}`}>
+                                <AlertCircle size={10} className="mr-1" />
+                                {task.priority}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
 
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 sm:opacity-0 group-hover:opacity-100 transition-opacity justify-end sm:justify-start">
+                          <button 
+                            onClick={() => handleOpenForm(task)}
+                            className="p-2 rounded-lg text-gray-500 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors"
+                            title="Edit"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(task.id)}
+                            className="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </motion.div>
+              )}
             </div>
+
+            {/* AI Assistant Section (Moved below tasks) */}
+            <AIAssistant tasks={tasks} />
+
           </div>
         </main>
       </div>
+
+      {/* Form Modal */}
+      <AnimatePresence>
+        {isFormOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-md"
+              onClick={resetForm}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto custom-scrollbar bg-[var(--background)] rounded-2xl shadow-2xl border border-fuchsia-500/20 flex flex-col"
+            >
+              {/* Energetic Header */}
+              <div className="bg-gradient-to-r from-violet-600 via-fuchsia-600 to-orange-500 p-6 text-white flex justify-between items-center shrink-0">
+                <h2 className="text-xl font-bold tracking-wide flex items-center gap-2">
+                  {editingTask ? '✨ Edit Task' : '🚀 Create New Task'}
+                </h2>
+                <button onClick={resetForm} className="text-white/80 hover:text-white bg-white/20 hover:bg-white/30 p-2 rounded-full transition-colors backdrop-blur-sm">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmit} className="p-6 space-y-5 flex-1 overflow-y-auto">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Task Title *</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="w-full bg-gray-50/50 dark:bg-gray-900/50 border border-[var(--card-border)] text-[var(--foreground)] px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all font-medium"
+                    placeholder="e.g., Complete the React project"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Description</label>
+                  <textarea 
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full bg-gray-50/50 dark:bg-gray-900/50 border border-[var(--card-border)] text-[var(--foreground)] px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all min-h-[100px] resize-none"
+                    placeholder="Add more details about this task..."
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-5">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Priority</label>
+                    <select 
+                      value={priority}
+                      onChange={(e) => setPriority(e.target.value as 'low' | 'medium' | 'high')}
+                      className="w-full bg-gray-50/50 dark:bg-gray-900/50 border border-[var(--card-border)] text-[var(--foreground)] px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all cursor-pointer font-medium"
+                    >
+                      <option value="low">Low Priority</option>
+                      <option value="medium">Medium Priority</option>
+                      <option value="high">High Priority 🔥</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Due Date</label>
+                    <input 
+                      type="date" 
+                      value={dueDate}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      className="w-full bg-gray-50/50 dark:bg-gray-900/50 border border-[var(--card-border)] text-[var(--foreground)] px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Category</label>
+                  <input 
+                    type="text" 
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full bg-gray-50/50 dark:bg-gray-900/50 border border-[var(--card-border)] text-[var(--foreground)] px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-fuchsia-500 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
+                    placeholder="e.g., Work, Personal, Shopping"
+                  />
+                </div>
+
+                <div className="pt-6 mt-2 border-t border-[var(--card-border)] flex justify-end gap-3 shrink-0">
+                  <button 
+                    type="button" 
+                    onClick={resetForm}
+                    className="px-6 py-3 rounded-xl text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="bg-gradient-to-r from-violet-600 via-fuchsia-600 to-orange-500 text-white font-bold px-8 py-3 rounded-xl hover:shadow-[0_0_20px_rgba(217,70,239,0.4)] transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    {editingTask ? 'Save Changes' : 'Create Task 🚀'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

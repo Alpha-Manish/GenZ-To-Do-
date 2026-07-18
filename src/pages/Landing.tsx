@@ -221,28 +221,29 @@ export default function Landing() {
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[
-            { icon: ListTodo, title: 'Smart Task Management', desc: 'Organize tasks with custom tags, priorities, and smart folders.' },
-            { icon: Flame, title: 'Habit Tracking', desc: 'Build lasting routines with daily tracking and visual progress charts.' },
-            { icon: Timer, title: 'Pomodoro Focus Timer', desc: 'Stay in the zone with built-in customizable focus sessions.' },
-            { icon: BarChart3, title: 'Productivity Analytics', desc: 'Understand your work patterns with beautiful, detailed insights.' },
-            { icon: Sparkles, title: 'AI Task Suggestions', desc: 'Let our AI break down large projects into manageable steps.' },
-            { icon: CheckCircle2, title: 'Streak Tracking', desc: 'Stay motivated by maintaining daily activity streaks.' },
+            { icon: ListTodo, title: 'Smart Task Management', desc: 'Organize tasks with custom tags, priorities, and smart folders.', path: '/dashboard' },
+            { icon: Flame, title: 'Habit Tracking', desc: 'Build lasting routines with daily tracking and visual progress charts.', path: '/habits' },
+            { icon: Timer, title: 'Pomodoro Focus Timer', desc: 'Stay in the zone with built-in customizable focus sessions.', path: '/focus' },
+            { icon: BarChart3, title: 'Productivity Analytics', desc: 'Understand your work patterns with beautiful, detailed insights.', path: '/analytics' },
+            { icon: Sparkles, title: 'AI Task Suggestions', desc: 'Let our AI break down large projects into manageable steps.', path: '/dashboard' },
+            { icon: CheckCircle2, title: 'Streak Tracking', desc: 'Stay motivated by maintaining daily activity streaks.', path: '/streak' },
           ].map((feature, i) => (
-            <motion.div 
-              key={i}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.1 }}
-              whileHover={{ y: -5 }}
-              className="glass-card p-8 group cursor-pointer border-transparent hover:border-violet-500/20 transition-all"
-            >
-              <div className="w-12 h-12 rounded-xl bg-violet-500/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
-                <feature.icon className="w-6 h-6 text-violet-500" />
-              </div>
-              <h3 className="text-xl font-semibold mb-3">{feature.title}</h3>
-              <p className="text-foreground/70 text-sm leading-relaxed">{feature.desc}</p>
-            </motion.div>
+            <Link to={feature.path} key={i}>
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1 }}
+                whileHover={{ y: -5 }}
+                className="glass-card p-8 group cursor-pointer border-transparent hover:border-violet-500/20 transition-all h-full"
+              >
+                <div className="w-12 h-12 rounded-xl bg-violet-500/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                  <feature.icon className="w-6 h-6 text-violet-500" />
+                </div>
+                <h3 className="text-xl font-semibold mb-3">{feature.title}</h3>
+                <p className="text-foreground/70 text-sm leading-relaxed">{feature.desc}</p>
+              </motion.div>
+            </Link>
           ))}
         </div>
       </section>

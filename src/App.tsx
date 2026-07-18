@@ -12,7 +12,10 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Analytics from './pages/Analytics';
+import Focus from './pages/Focus';
+import Streak from './pages/Streak';
 import Settings from './pages/Settings';
+import Habits from './pages/Habits';
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -36,6 +39,30 @@ function AnimatedRoutes() {
           element={
             <ProtectedRoute>
               <PageWrapper><Analytics /></PageWrapper>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/focus" 
+          element={
+            <ProtectedRoute>
+              <PageWrapper><Focus /></PageWrapper>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/streak" 
+          element={
+            <ProtectedRoute>
+              <PageWrapper><Streak /></PageWrapper>
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/habits" 
+          element={
+            <ProtectedRoute>
+              <PageWrapper><Habits /></PageWrapper>
             </ProtectedRoute>
           } 
         />

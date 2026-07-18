@@ -20,6 +20,7 @@ import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { Sidebar } from '../components/Sidebar';
 import { AIAssistant } from '../components/AIAssistant';
 import toast from 'react-hot-toast';
 
@@ -75,13 +76,8 @@ export default function Dashboard() {
   // Form State
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [avatar, setAvatar] = useState(() => localStorage.getItem('genz_user_avatar') || '');
-
-  useEffect(() => {
-    const handleAvatarSync = () => setAvatar(localStorage.getItem('genz_user_avatar') || '');
-    window.addEventListener('avatar_updated', handleAvatarSync);
-    return () => window.removeEventListener('avatar_updated', handleAvatarSync);
-  }, []);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
   
   // Form Fields
   const [title, setTitle] = useState('');
@@ -107,10 +103,10 @@ export default function Dashboard() {
   });
   const categories = ['All', ...Array.from(allCategoriesMap.values())];
 
-  const handleAddCategory = () => {
-    const newCat = window.prompt('Enter new category name:');
-    if (newCat && newCat.trim()) {
-      const trimmed = newCat.trim();
+  const submitCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newCategoryName && newCategoryName.trim()) {
+      const trimmed = newCategoryName.trim();
       const existing = categories.find(c => c.toLowerCase() === trimmed.toLowerCase());
       if (!existing) {
         const updated = [...customCategories, trimmed];
@@ -121,6 +117,16 @@ export default function Dashboard() {
         setActiveCategory(existing);
       }
     }
+    setIsCategoryModalOpen(false);
+    setNewCategoryName('');
+  };
+
+  const deleteCategory = (cat: string) => {
+    const updated = customCategories.filter(c => c !== cat);
+    setCustomCategories(updated);
+    localStorage.setItem('genz_custom_categories', JSON.stringify(updated));
+    if (activeCategory === cat) setActiveCategory('All');
+    toast.success(`Category "${cat}" deleted`);
   };
 
   // Search & Filter
@@ -241,11 +247,7 @@ export default function Dashboard() {
     }
   };
 
-  const navItems = [
-    { name: 'Tasks', icon: CheckSquare, active: true, path: '/dashboard' },
-    { name: 'Analytics', icon: BarChart2, active: false, path: '/analytics' },
-    { name: 'Settings', icon: Settings, active: false, path: '/settings' },
-  ];
+
 
   return (
     <div className="min-h-screen bg-[var(--background)] flex overflow-hidden">
@@ -263,59 +265,7 @@ export default function Dashboard() {
       </AnimatePresence>
 
       {/* Sidebar */}
-      <aside 
-        className={`fixed inset-y-0 left-0 z-50 w-64 glass-card rounded-none border-r border-[var(--card-border)] transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:block ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        <div className="h-full flex flex-col">
-          <div className="h-16 flex items-center justify-between px-6 border-b border-[var(--card-border)]">
-            <span className="text-xl font-bold gradient-text tracking-wider">GenZ To-Do</span>
-            <button 
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-2 rounded-lg hover:bg-[var(--card-bg)] text-[var(--foreground)]"
-            >
-              <X size={20} />
-            </button>
-          </div>
-
-          <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.name}
-                  to={item.path}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                    item.active 
-                      ? 'bg-gradient-to-r from-violet-600/10 to-indigo-600/10 text-violet-600 dark:text-violet-400 font-medium' 
-                      : 'text-[var(--foreground)] hover:bg-[var(--card-bg)]'
-                  }`}
-                >
-                  <Icon size={20} className={item.active ? 'text-violet-600 dark:text-violet-400' : 'text-gray-500 dark:text-gray-400'} />
-                  <span>{item.name}</span>
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="p-4 border-t border-[var(--card-border)]">
-            <div className="flex items-center space-x-3 p-2 rounded-xl hover:bg-[var(--card-bg)] transition-colors cursor-pointer">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white font-bold uppercase overflow-hidden">
-                {avatar ? (
-                  <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  currentUser?.email?.charAt(0) || 'U'
-                )}
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <p className="text-sm font-medium text-[var(--foreground)] truncate">{currentUser?.email}</p>
-                <button onClick={logout} className="text-xs text-red-500 hover:text-red-600">Sign out</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </aside>
+      <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
@@ -370,7 +320,7 @@ export default function Dashboard() {
                     animate={{ opacity: 1, y: 0, scale: 1 }} 
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ duration: 0.2 }}
-                    className="absolute right-0 mt-2 w-72 glass-card rounded-2xl shadow-2xl border border-[var(--card-border)] overflow-hidden z-50 origin-top-right"
+                    className="absolute right-0 mt-2 w-72 bg-white dark:bg-[#0b0c10] rounded-2xl shadow-2xl border border-[var(--card-border)] overflow-hidden z-[60] origin-top-right"
                   >
                     <div className="p-4 border-b border-[var(--card-border)]">
                       <h3 className="font-semibold text-[var(--foreground)]">Notifications</h3>
@@ -424,21 +374,36 @@ export default function Dashboard() {
 
             {/* Category Navigation Bar */}
             <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-hide">
-              {categories.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setActiveCategory(cat)}
-                  className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all ${
-                    activeCategory === cat 
-                      ? 'bg-violet-500 text-white shadow-md shadow-violet-500/30'
-                      : 'bg-[var(--card-bg)] text-gray-500 hover:bg-violet-500/10 hover:text-violet-500 border border-[var(--card-border)]'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
+              {categories.map((cat) => {
+                const isCustom = customCategories.includes(cat);
+                return (
+                  <div key={cat} className="relative group/cat flex-shrink-0">
+                    <div
+                      onClick={() => setActiveCategory(cat)}
+                      className={`cursor-pointer flex items-center gap-1.5 px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all ${
+                        activeCategory === cat 
+                          ? 'bg-violet-500 text-white shadow-md shadow-violet-500/30'
+                          : 'bg-[var(--card-bg)] text-gray-500 hover:bg-violet-500/10 hover:text-violet-500 border border-[var(--card-border)]'
+                      }`}
+                    >
+                      <span>{cat}</span>
+                      {isCustom && (
+                        <div 
+                          onClick={(e) => { e.stopPropagation(); deleteCategory(cat); }}
+                          className={`p-0.5 rounded-full transition-all ${
+                            activeCategory === cat ? 'hover:bg-white/20' : 'hover:bg-red-500 hover:text-white'
+                          }`}
+                          title="Delete Category"
+                        >
+                          <X size={14} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
               <button
-                onClick={handleAddCategory}
+                onClick={() => setIsCategoryModalOpen(true)}
                 className="px-3 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all bg-[var(--card-bg)] text-gray-500 hover:bg-violet-500/10 hover:text-violet-500 border border-dashed border-gray-400 dark:border-gray-600 hover:border-violet-500 flex items-center justify-center flex-shrink-0"
                 title="Add Category"
               >
@@ -563,7 +528,7 @@ export default function Dashboard() {
                         </div>
 
                         {/* Actions */}
-                        <div className="flex items-center gap-2 sm:opacity-0 group-hover:opacity-100 transition-opacity justify-end sm:justify-start">
+                        <div className="flex items-center gap-2 opacity-100 transition-opacity justify-end sm:justify-start">
                           <button 
                             onClick={() => handleOpenForm(task)}
                             className="p-2 rounded-lg text-gray-500 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors"
@@ -586,8 +551,10 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* AI Assistant Section (Moved below tasks) */}
-            <AIAssistant tasks={tasks} />
+            {/* AI Assistant Section */}
+            <div className="mt-6">
+              <AIAssistant tasks={tasks} />
+            </div>
 
           </div>
         </main>
@@ -691,6 +658,59 @@ export default function Dashboard() {
                     className="bg-gradient-to-r from-violet-600 via-fuchsia-600 to-orange-500 text-white font-bold px-8 py-3 rounded-xl hover:shadow-[0_0_20px_rgba(217,70,239,0.4)] transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98]"
                   >
                     {editingTask ? 'Save Changes' : 'Create Task 🚀'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Add Category Modal */}
+      <AnimatePresence>
+        {isCategoryModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-md"
+              onClick={() => setIsCategoryModalOpen(false)}
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-sm bg-[var(--background)] rounded-2xl shadow-2xl border border-[var(--card-border)] flex flex-col"
+            >
+              <div className="p-6 border-b border-[var(--card-border)] flex justify-between items-center">
+                <h2 className="text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
+                  <Tag size={18} className="text-violet-500" />
+                  New Category
+                </h2>
+                <button onClick={() => setIsCategoryModalOpen(false)} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                  <X size={20} />
+                </button>
+              </div>
+              <form onSubmit={submitCategory} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">Category Name</label>
+                  <input 
+                    type="text" 
+                    required
+                    autoFocus
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    className="w-full bg-gray-50/50 dark:bg-gray-900/50 border border-[var(--card-border)] text-[var(--foreground)] px-4 py-3 rounded-xl text-sm focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20"
+                    placeholder="e.g., Fitness, Groceries"
+                  />
+                </div>
+                <div className="pt-2 flex gap-3">
+                  <button type="button" onClick={() => setIsCategoryModalOpen(false)} className="flex-1 py-2 rounded-xl text-sm font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                    Cancel
+                  </button>
+                  <button type="submit" className="flex-1 py-2 bg-violet-500 text-white font-bold rounded-xl hover:bg-violet-600 transition-colors">
+                    Add
                   </button>
                 </div>
               </form>

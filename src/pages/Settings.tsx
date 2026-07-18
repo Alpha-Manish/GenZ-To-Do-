@@ -9,8 +9,8 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useSettings } from '../context/SettingsContext';
 import { Link } from 'react-router-dom';
-import toast from 'react-hot-toast';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { Sidebar } from '../components/Sidebar';
 
 export default function Settings() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -410,11 +410,7 @@ export default function Settings() {
     }
   };
 
-  const navItems = [
-    { name: 'Tasks', icon: CheckSquare, active: false, path: '/dashboard' },
-    { name: 'Analytics', icon: BarChart2, active: false, path: '/analytics' },
-    { name: 'Settings', icon: SettingsIcon, active: true, path: '/settings' },
-  ];
+
 
   return (
     <div className="min-h-screen flex overflow-hidden w-full">
@@ -432,59 +428,7 @@ export default function Settings() {
       </AnimatePresence>
 
       {/* Sidebar */}
-      <aside 
-        className={`fixed inset-y-0 left-0 z-50 w-64 glass-card rounded-none border-r border-[var(--card-border)] transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:block ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        <div className="h-full flex flex-col">
-          <div className="h-16 flex items-center justify-between px-6 border-b border-[var(--card-border)]">
-            <span className="text-xl font-bold gradient-text tracking-wider">GenZ To-Do</span>
-            <button 
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden p-2 rounded-lg hover:bg-[var(--card-bg)] text-[var(--foreground)]"
-            >
-              <X size={20} />
-            </button>
-          </div>
-
-          <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.name}
-                  to={item.path}
-                  className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                    item.active 
-                      ? 'bg-gradient-to-r from-violet-600/10 to-indigo-600/10 text-violet-600 dark:text-violet-400 font-medium' 
-                      : 'text-[var(--foreground)] hover:bg-[var(--card-bg)]'
-                  }`}
-                >
-                  <Icon size={20} className={item.active ? 'text-violet-600 dark:text-violet-400' : 'text-gray-500 dark:text-gray-400'} />
-                  <span>{item.name}</span>
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="p-4 border-t border-[var(--card-border)]">
-            <div className="flex items-center space-x-3 p-2 rounded-xl hover:bg-[var(--card-bg)] transition-colors cursor-pointer">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center text-white font-bold uppercase overflow-hidden">
-                {avatar ? (
-                  <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  currentUser?.email?.charAt(0) || 'U'
-                )}
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <p className="text-sm font-medium text-[var(--foreground)] truncate">{currentUser?.email}</p>
-                <button onClick={logout} className="text-xs text-red-500 hover:text-red-600">Sign out</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </aside>
+      <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">

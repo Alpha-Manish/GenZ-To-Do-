@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Menu, Bell, Search, Timer } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { PomodoroTimer } from '../components/PomodoroTimer';
+import { Stopwatch } from '../components/Stopwatch';
 import { Sidebar } from '../components/Sidebar';
 import { AnimatePresence, motion } from 'framer-motion';
 
@@ -60,8 +61,9 @@ export default function Focus() {
               </div>
             </div>
 
-            <div className="max-w-2xl">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl">
               <PomodoroTimer />
+              <Stopwatch />
             </div>
           </div>
         </main>

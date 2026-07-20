@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Menu, 
   Search, 
@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
   BarChart, 
   Bar, 
@@ -35,6 +35,24 @@ export default function Analytics() {
   const { currentUser, logout } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [avatar, setAvatar] = useState(() => localStorage.getItem('genz_user_avatar') || '');
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+
+  const handleBarClick = (data: any, status: 'completed' | 'pending') => {
+    if (data && data.activePayload && data.activePayload.length > 0) {
+       // Recharts onClick on BarChart gives activePayload, but if onClick is on Bar, it gives the specific data object.
+    }
+  };
+
+  useEffect(() => {
+    if (!isLoading && scrollContainerRef.current) {
+      setTimeout(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollLeft = scrollContainerRef.current.scrollWidth;
+        }
+      }, 100);
+    }
+  }, [isLoading]);
 
   useEffect(() => {
     const handleAvatarSync = () => setAvatar(localStorage.getItem('genz_user_avatar') || '');
@@ -77,30 +95,40 @@ export default function Analytics() {
     productivityScore
   };
 
-  // Compute Weekly Data
-  const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const weekMap = new Map();
-  weekDays.forEach(day => weekMap.set(day, { name: day, completed: 0, pending: 0 }));
+  // Compute Monthly Data (Last 30 Days)
+  const chartData: any[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // Reset time to midnight
+  const dateMap = new Map();
+
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+    const monthDay = d.getDate();
+    const displayName = `${monthDay} ${dayName}`;
+    const entry = { name: displayName, date: dateStr, completed: 0, pending: 0 };
+    dateMap.set(dateStr, entry);
+    chartData.push(entry);
+  }
 
   tasks.forEach(task => {
     if (task.dueDate) {
-      const date = new Date(task.dueDate);
-      if (!isNaN(date.getTime())) {
-        const day = weekDays[date.getDay()];
-        const entry = weekMap.get(day);
-        if (task.completed) {
-          entry.completed += 1;
-        } else {
-          entry.pending += 1;
+      const taskDate = new Date(task.dueDate);
+      if (!isNaN(taskDate.getTime())) {
+        const dateStr = taskDate.getFullYear() + '-' + String(taskDate.getMonth() + 1).padStart(2, '0') + '-' + String(taskDate.getDate()).padStart(2, '0');
+        if (dateMap.has(dateStr)) {
+          const entry = dateMap.get(dateStr);
+          if (task.completed) {
+            entry.completed += 1;
+          } else {
+            entry.pending += 1;
+          }
         }
       }
     }
   });
-  
-  const weeklyData = [
-    weekMap.get('Mon'), weekMap.get('Tue'), weekMap.get('Wed'), 
-    weekMap.get('Thu'), weekMap.get('Fri'), weekMap.get('Sat'), weekMap.get('Sun')
-  ];
 
   // Compute Category Data
   const catMap = new Map();
@@ -224,12 +252,28 @@ export default function Analytics() {
               
               {/* Weekly Progress Chart */}
               <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 }} className="glass-card p-6 group hover:shadow-xl hover:shadow-violet-500/10 transition-all duration-300">
-                <h3 className="text-lg font-bold text-[var(--foreground)] mb-6 flex items-center gap-2">
-                  <BarChart2 className="text-violet-500" size={20} /> Weekly Progress
-                </h3>
-                <div className="h-72 w-full relative">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+                  <h3 className="text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
+                    <BarChart2 className="text-violet-500" size={20} /> Monthly Progress
+                  </h3>
+                  <div className="flex items-center gap-4 text-sm font-medium">
+                    <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                      <span className="w-3 h-3 rounded-full bg-[#8b5cf6]"></span>
+                      Completed Tasks
+                    </div>
+                    <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                      <span className="w-3 h-3 rounded-full bg-[#f97316]"></span>
+                      Pending Tasks
+                    </div>
+                  </div>
+                </div>
+                <div 
+                  className="h-72 w-full overflow-x-auto overflow-y-hidden custom-scrollbar"
+                  ref={scrollContainerRef}
+                  style={{ scrollBehavior: 'smooth' }}
+                >
                   {isLoading ? (
-                    <div className="absolute inset-0 flex items-end justify-between px-4 pb-8 space-x-2">
+                    <div className="flex items-end justify-between px-4 pb-8 space-x-2 w-full h-full min-w-[800px]">
                       {[1, 2, 3, 4, 5, 6, 7].map(i => (
                         <div key={i} className="w-full bg-gray-200/50 dark:bg-gray-700/50 rounded-t-md animate-pulse relative overflow-hidden" style={{ height: `${Math.random() * 60 + 20}%` }}>
                           <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent dark:via-white/5" />
@@ -237,20 +281,45 @@ export default function Analytics() {
                       ))}
                     </div>
                   ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={weeklyData} margin={{ top: 20, right: 30, left: -20, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(156, 163, 175, 0.2)" vertical={false} />
-                        <XAxis dataKey="name" tick={{fill: '#9ca3af', fontSize: 12}} axisLine={false} tickLine={false} />
-                        <YAxis tick={{fill: '#9ca3af', fontSize: 12}} axisLine={false} tickLine={false} />
-                        <Tooltip 
-                          contentStyle={{ backgroundColor: 'var(--card-bg)', backdropFilter: 'blur(10px)', border: '1px solid var(--card-border)', borderRadius: '12px', color: 'var(--foreground)' }}
-                          cursor={{fill: 'rgba(139, 92, 246, 0.1)'}}
-                        />
-                        <Legend iconType="circle" wrapperStyle={{ fontSize: 12, paddingTop: 20 }} />
-                        <Bar dataKey="completed" name="Completed Tasks" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={12} />
-                        <Bar dataKey="pending" name="Pending Tasks" fill="#f97316" radius={[4, 4, 0, 0]} barSize={12} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <div style={{ width: `${(chartData.length / 7) * 100}%`, minWidth: '100%', height: '100%' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={chartData} margin={{ top: 20, right: 30, left: -20, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(156, 163, 175, 0.2)" vertical={false} />
+                          <XAxis dataKey="name" tick={{fill: '#9ca3af', fontSize: 11}} axisLine={false} tickLine={false} minTickGap={10} />
+                          <YAxis tick={{fill: '#9ca3af', fontSize: 12}} axisLine={false} tickLine={false} />
+                          <Tooltip 
+                            contentStyle={{ backgroundColor: 'var(--card-bg)', backdropFilter: 'blur(10px)', border: '1px solid var(--card-border)', borderRadius: '12px', color: 'var(--foreground)' }}
+                            cursor={{fill: 'rgba(139, 92, 246, 0.1)'}}
+                          />
+                          <Bar 
+                            dataKey="completed" 
+                            name="Completed Tasks" 
+                            fill="#8b5cf6" 
+                            radius={[4, 4, 0, 0]} 
+                            barSize={12} 
+                            onClick={(data) => {
+                              if (data && data.date) {
+                                navigate('/dashboard', { state: { filterDate: data.date, filterStatus: 'completed' } });
+                              }
+                            }}
+                            className="cursor-pointer"
+                          />
+                          <Bar 
+                            dataKey="pending" 
+                            name="Pending Tasks" 
+                            fill="#f97316" 
+                            radius={[4, 4, 0, 0]} 
+                            barSize={12} 
+                            onClick={(data) => {
+                              if (data && data.date) {
+                                navigate('/dashboard', { state: { filterDate: data.date, filterStatus: 'pending' } });
+                              }
+                            }}
+                            className="cursor-pointer"
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   )}
                 </div>
               </motion.div>

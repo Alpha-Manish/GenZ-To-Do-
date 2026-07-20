@@ -2,105 +2,32 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Flame, Trophy, Star, Medal, Award } from 'lucide-react';
 
-interface StreakWidgetProps {
-  tasks: any[];
-}
+import { getStreakData, calculateCurrentStreak, calculateMaxStreak, StreakData } from '../utils/streakUtils';
 
-interface StreakData {
-  activeDates: string[];
-  longestStreak: number;
+interface StreakWidgetProps {
+  tasks?: any[]; // Kept for backwards compatibility if passed, but not needed
 }
 
 export function StreakWidget({ tasks }: StreakWidgetProps) {
-  const [streakData, setStreakData] = useState<StreakData>(() => {
-    try {
-      const saved = localStorage.getItem('genz_streak_data');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error('Failed to parse streak data', e);
-    }
-    return { activeDates: [], longestStreak: 0 };
-  });
+  const [streakData, setStreakData] = useState<StreakData>(getStreakData());
 
-  const [lastCompletedCount, setLastCompletedCount] = useState(() => tasks.filter(t => t.completed).length);
-
-  // Track task completions
   useEffect(() => {
-    const currentCompleted = tasks.filter(t => t.completed).length;
+    const handleStreakSync = () => {
+      setStreakData(getStreakData());
+    };
     
-    if (currentCompleted > lastCompletedCount) {
-      // A task was completed! Add today to active dates
-      const todayStr = new Date().toISOString().split('T')[0];
-      
-      setStreakData(prev => {
-        if (!prev.activeDates.includes(todayStr)) {
-          const newDates = [...prev.activeDates, todayStr].sort();
-          return { ...prev, activeDates: newDates };
-        }
-        return prev;
-      });
-    }
-    setLastCompletedCount(currentCompleted);
-  }, [tasks, lastCompletedCount]);
-
-  // Derived state for render and saving
-  const dates = [...streakData.activeDates].sort();
-  let currentStreak = 0;
-  if (dates.length > 0) {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayDate = new Date(todayStr);
+    window.addEventListener('storage', handleStreakSync);
+    window.addEventListener('streak_updated', handleStreakSync);
     
-    const yesterdayDate = new Date(todayDate);
-    yesterdayDate.setUTCDate(yesterdayDate.getUTCDate() - 1);
-    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
+    return () => {
+      window.removeEventListener('storage', handleStreakSync);
+      window.removeEventListener('streak_updated', handleStreakSync);
+    };
+  }, []);
 
-    if (dates.includes(todayStr) || dates.includes(yesterdayStr)) {
-      currentStreak = 1;
-      let checkDate = new Date(dates.includes(todayStr) ? todayStr : yesterdayStr);
-      while (true) {
-        checkDate.setUTCDate(checkDate.getUTCDate() - 1);
-        const checkStr = checkDate.toISOString().split('T')[0];
-        if (dates.includes(checkStr)) {
-          currentStreak++;
-        } else {
-          break;
-        }
-      }
-    }
-  }
-
-  // Calculate max streak globally
-  let maxTemp = 0;
-  if (dates.length > 0) {
-    let tempStreak = 1;
-    maxTemp = 1;
-    for (let i = 1; i < dates.length; i++) {
-      const d1 = new Date(dates[i - 1]);
-      const d2 = new Date(dates[i]);
-      const diffTime = Math.abs(d2.getTime() - d1.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
-      if (diffDays === 1) {
-        tempStreak++;
-        if (tempStreak > maxTemp) maxTemp = tempStreak;
-      } else if (diffDays > 1) {
-        tempStreak = 1;
-      }
-    }
-  }
-
+  const currentStreak = calculateCurrentStreak(streakData.activeDates);
+  const maxTemp = calculateMaxStreak(streakData.activeDates);
   const longest = Math.max(streakData.longestStreak, currentStreak, maxTemp);
-
-  // Persist if longest streak increased
-  useEffect(() => {
-    if (longest > streakData.longestStreak) {
-      const newData = { ...streakData, longestStreak: longest };
-      setStreakData(newData);
-      localStorage.setItem('genz_streak_data', JSON.stringify(newData));
-    } else {
-      localStorage.setItem('genz_streak_data', JSON.stringify(streakData));
-    }
-  }, [longest, streakData]);
 
   const achievements = [
     { days: 3, title: 'Starter', icon: Star, color: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },

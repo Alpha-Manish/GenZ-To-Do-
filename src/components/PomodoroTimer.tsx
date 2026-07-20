@@ -11,8 +11,6 @@ interface PomodoroState {
   mode: 'focus' | 'shortBreak' | 'longBreak';
   sessionCount: number;
   isActive: boolean;
-  isStopwatchMode: boolean;
-  stopwatchTime: number;
 }
 
 export function PomodoroTimer() {
@@ -23,9 +21,7 @@ export function PomodoroTimer() {
         const parsed = JSON.parse(saved);
         return { 
           ...parsed, 
-          isActive: false, // Always load as paused
-          isStopwatchMode: parsed.isStopwatchMode || false,
-          stopwatchTime: parsed.stopwatchTime || 0
+          isActive: false // Always load as paused
         };
       }
     } catch (e) {
@@ -35,9 +31,7 @@ export function PomodoroTimer() {
       timeLeft: FOCUS_TIME,
       mode: 'focus',
       sessionCount: 0,
-      isActive: false,
-      isStopwatchMode: false,
-      stopwatchTime: 0
+      isActive: false
     };
   });
 
@@ -50,27 +44,21 @@ export function PomodoroTimer() {
     let interval: NodeJS.Timeout | null = null;
 
     if (state.isActive) {
-      if (state.isStopwatchMode) {
+      if (state.timeLeft > 0) {
         interval = setInterval(() => {
-          setState((prev) => ({ ...prev, stopwatchTime: prev.stopwatchTime + 1 }));
+          setState((prev) => ({ ...prev, timeLeft: prev.timeLeft - 1 }));
         }, 1000);
-      } else {
-        if (state.timeLeft > 0) {
-          interval = setInterval(() => {
-            setState((prev) => ({ ...prev, timeLeft: prev.timeLeft - 1 }));
-          }, 1000);
-        } else if (state.timeLeft === 0) {
-          // Timer finished
-          if (state.mode === 'focus') {
-            const newSessionCount = state.sessionCount + 1;
-            if (newSessionCount % 4 === 0) {
-              setState({ ...state, mode: 'longBreak', timeLeft: LONG_BREAK_TIME, sessionCount: newSessionCount, isActive: false });
-            } else {
-              setState({ ...state, mode: 'shortBreak', timeLeft: SHORT_BREAK_TIME, sessionCount: newSessionCount, isActive: false });
-            }
+      } else if (state.timeLeft === 0) {
+        // Timer finished
+        if (state.mode === 'focus') {
+          const newSessionCount = state.sessionCount + 1;
+          if (newSessionCount % 4 === 0) {
+            setState({ ...state, mode: 'longBreak', timeLeft: LONG_BREAK_TIME, sessionCount: newSessionCount, isActive: false });
           } else {
-            setState({ ...state, mode: 'focus', timeLeft: FOCUS_TIME, isActive: false });
+            setState({ ...state, mode: 'shortBreak', timeLeft: SHORT_BREAK_TIME, sessionCount: newSessionCount, isActive: false });
           }
+        } else {
+          setState({ ...state, mode: 'focus', timeLeft: FOCUS_TIME, isActive: false });
         }
       }
     }
@@ -78,7 +66,7 @@ export function PomodoroTimer() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [state.isActive, state.timeLeft, state.mode, state.sessionCount, state.isStopwatchMode]);
+  }, [state.isActive, state.timeLeft, state.mode, state.sessionCount]);
 
   const toggleTimer = () => {
     setState((prev) => ({ ...prev, isActive: !prev.isActive }));
@@ -90,15 +78,6 @@ export function PomodoroTimer() {
       timeLeft: FOCUS_TIME,
       mode: 'focus',
       sessionCount: 0,
-      isActive: false,
-      stopwatchTime: 0
-    }));
-  };
-
-  const toggleStopwatchMode = () => {
-    setState(prev => ({
-      ...prev,
-      isStopwatchMode: !prev.isStopwatchMode,
       isActive: false
     }));
   };
@@ -120,20 +99,14 @@ export function PomodoroTimer() {
     return LONG_BREAK_TIME;
   };
 
-  let progress = 0;
-  if (!state.isStopwatchMode) {
-    progress = ((getTotalTime() - state.timeLeft) / getTotalTime()) * 100;
-  } else {
-    // For stopwatch, animate the ring every 60 seconds
-    progress = ((state.stopwatchTime % 60) / 60) * 100;
-  }
+  const progress = ((getTotalTime() - state.timeLeft) / getTotalTime()) * 100;
 
   // Circular progress SVG variables
   const radius = 90;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (progress / 100) * circumference;
 
-  const timeStr = formatTime(state.isStopwatchMode ? state.stopwatchTime : state.timeLeft);
+  const timeStr = formatTime(state.timeLeft);
   const timeSizeClass = timeStr.length > 5 ? 'text-4xl' : 'text-5xl';
 
   return (
@@ -141,33 +114,22 @@ export function PomodoroTimer() {
       <div className="absolute top-0 left-0 w-32 h-32 bg-fuchsia-500/10 rounded-full blur-3xl -z-10 group-hover:bg-fuchsia-500/20 transition-colors duration-500"></div>
 
       <div className="absolute top-6 left-6 flex items-center z-10">
-        <button 
-          onClick={toggleStopwatchMode}
-          className="px-3 py-1.5 rounded-full bg-[var(--background)] border border-[var(--card-border)] text-xs font-semibold text-[var(--foreground)] shadow-sm hover:border-fuchsia-500/50 hover:text-fuchsia-500 transition-colors flex items-center gap-1.5"
-        >
-          {state.isStopwatchMode ? <Clock size={14} /> : <Timer size={14} />}
-          {state.isStopwatchMode ? "Stopwatch" : "Pomodoro"}
-        </button>
+        <div className="px-3 py-1.5 rounded-full bg-[var(--background)] border border-[var(--card-border)] text-xs font-semibold text-[var(--foreground)] shadow-sm flex items-center gap-1.5">
+          <Timer size={14} className="text-violet-500" />
+          Pomodoro
+        </div>
       </div>
 
-      {!state.isStopwatchMode && (
-        <div className="absolute top-6 right-6 flex items-center space-x-2 z-10">
-          <div className="px-3 py-1.5 rounded-full bg-[var(--background)] border border-[var(--card-border)] text-xs font-semibold text-[var(--foreground)] shadow-sm">
-            Session {state.sessionCount}
-          </div>
+      <div className="absolute top-6 right-6 flex items-center space-x-2 z-10">
+        <div className="px-3 py-1.5 rounded-full bg-[var(--background)] border border-[var(--card-border)] text-xs font-semibold text-[var(--foreground)] shadow-sm">
+          Session {state.sessionCount}
         </div>
-      )}
+      </div>
 
       <div className="text-center mb-8 mt-2">
         <h3 className="text-lg font-bold gradient-text flex items-center justify-center gap-2">
-          {state.isStopwatchMode ? (
-            <><Timer className="text-fuchsia-500" size={20} /> Task Stopwatch</>
-          ) : (
-            <>
-              {state.mode === 'focus' ? <Brain className="text-fuchsia-500" size={20} /> : <Coffee className="text-fuchsia-500" size={20} />}
-              {state.mode === 'focus' ? 'Focus Session' : state.mode === 'shortBreak' ? 'Short Break' : 'Long Break'}
-            </>
-          )}
+          {state.mode === 'focus' ? <Brain className="text-fuchsia-500" size={20} /> : <Coffee className="text-fuchsia-500" size={20} />}
+          {state.mode === 'focus' ? 'Focus Session' : state.mode === 'shortBreak' ? 'Short Break' : 'Long Break'}
         </h3>
       </div>
 

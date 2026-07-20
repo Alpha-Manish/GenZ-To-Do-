@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
 import { CheckSquare, BarChart2, Settings, Timer, X, Flame, Repeat } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { getStreakData, calculateCurrentStreak } from '../utils/streakUtils';
 
 interface SidebarProps {
   sidebarOpen: boolean;
@@ -14,13 +15,7 @@ export function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
   const location = useLocation();
   const [avatar, setAvatar] = useState(() => localStorage.getItem('genz_user_avatar') || '');
   
-  const [streakData, setStreakData] = useState(() => {
-    try {
-      const saved = localStorage.getItem('genz_streak_data');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return { activeDates: [], longestStreak: 0 };
-  });
+  const [streakData, setStreakData] = useState(() => getStreakData());
 
   useEffect(() => {
     const handleAvatarSync = () => setAvatar(localStorage.getItem('genz_user_avatar') || '');
@@ -28,17 +23,15 @@ export function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
     
     // Also sync streak data in case it updates on another page
     const handleStreakSync = () => {
-      try {
-        const saved = localStorage.getItem('genz_streak_data');
-        if (saved) setStreakData(JSON.parse(saved));
-      } catch (e) {}
+      setStreakData(getStreakData());
     };
     window.addEventListener('storage', handleStreakSync);
-    // Since storage event only fires on other tabs, we can also dispatch a custom event if needed, but this is fine for now.
+    window.addEventListener('streak_updated', handleStreakSync);
 
     return () => {
       window.removeEventListener('avatar_updated', handleAvatarSync);
       window.removeEventListener('storage', handleStreakSync);
+      window.removeEventListener('streak_updated', handleStreakSync);
     };
   }, []);
 
@@ -52,30 +45,7 @@ export function Sidebar({ sidebarOpen, setSidebarOpen }: SidebarProps) {
   ];
 
   // Calculate current streak
-  const dates = [...streakData.activeDates].sort();
-  let currentStreak = 0;
-  if (dates.length > 0) {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayDate = new Date(todayStr);
-    
-    const yesterdayDate = new Date(todayDate);
-    yesterdayDate.setUTCDate(yesterdayDate.getUTCDate() - 1);
-    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
-
-    if (dates.includes(todayStr) || dates.includes(yesterdayStr)) {
-      currentStreak = 1;
-      let checkDate = new Date(dates.includes(todayStr) ? todayStr : yesterdayStr);
-      while (true) {
-        checkDate.setUTCDate(checkDate.getUTCDate() - 1);
-        const checkStr = checkDate.toISOString().split('T')[0];
-        if (dates.includes(checkStr)) {
-          currentStreak++;
-        } else {
-          break;
-        }
-      }
-    }
-  }
+  const currentStreak = calculateCurrentStreak(streakData.activeDates);
 
   return (
     <>

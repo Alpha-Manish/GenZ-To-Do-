@@ -18,11 +18,12 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { Sidebar } from '../components/Sidebar';
 import { AIAssistant } from '../components/AIAssistant';
 import toast from 'react-hot-toast';
+import { markTaskCompletedToday } from '../utils/streakUtils';
 
 interface Task {
   id: string;
@@ -37,6 +38,9 @@ interface Task {
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { currentUser, logout } = useAuth();
+  
+  const location = useLocation();
+  const state = location.state as { filterDate?: string; filterStatus?: 'completed' | 'pending' } | null;
   
   // Local State
   const [tasks, setTasks] = useState<Task[]>(() => {
@@ -132,6 +136,17 @@ export default function Dashboard() {
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState<'All Time' | 'Today' | 'Upcoming' | 'Past Due'>('All Time');
+  const [specificDateFilter, setSpecificDateFilter] = useState<string | null>(state?.filterDate || null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending'>(state?.filterStatus || 'all');
+
+  useEffect(() => {
+    if (state?.filterDate || state?.filterStatus) {
+      if (state.filterDate) setSpecificDateFilter(state.filterDate);
+      if (state.filterStatus) setStatusFilter(state.filterStatus);
+      // Clear the state from history so it doesn't persist on reload
+      window.history.replaceState({}, document.title);
+    }
+  }, [state]);
 
   // Notifications
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
@@ -208,7 +223,10 @@ export default function Dashboard() {
   const toggleComplete = (id: string) => {
     setTasks(tasks.map(t => {
       if (t.id === id) {
-        if (!t.completed) toast.success('Task completed! 🎉');
+        if (!t.completed) {
+          toast.success('Task completed! 🎉');
+          markTaskCompletedToday();
+        }
         return { ...t, completed: !t.completed };
       }
       return t;
@@ -226,6 +244,14 @@ export default function Dashboard() {
       t.description.toLowerCase().includes(searchQuery.toLowerCase())
     )
     .filter(t => {
+      if (statusFilter === 'completed') return t.completed;
+      if (statusFilter === 'pending') return !t.completed;
+      return true;
+    })
+    .filter(t => {
+      if (specificDateFilter) {
+        return t.dueDate === specificDateFilter;
+      }
       if (dateFilter === 'All Time') return true;
       if (!t.dueDate) return false;
       if (dateFilter === 'Today') return t.dueDate === todayStr;
@@ -352,9 +378,23 @@ export default function Dashboard() {
                 <p className="text-gray-500 dark:text-gray-400 mt-1">Manage and organize your day.</p>
               </div>
               <div className="flex items-center space-x-3 w-full sm:w-auto">
+                {(specificDateFilter || statusFilter !== 'all') && (
+                  <button 
+                    onClick={() => {
+                      setSpecificDateFilter(null);
+                      setStatusFilter('all');
+                    }}
+                    className="text-sm text-fuchsia-500 hover:text-fuchsia-600 font-medium px-2 whitespace-nowrap"
+                  >
+                    Clear Filters
+                  </button>
+                )}
                 <select 
                   value={dateFilter}
-                  onChange={(e: any) => setDateFilter(e.target.value)}
+                  onChange={(e: any) => {
+                    setDateFilter(e.target.value);
+                    setSpecificDateFilter(null); // Reset specific date if standard filter used
+                  }}
                   className="bg-[var(--background)] border border-[var(--card-border)] text-sm px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 text-[var(--foreground)]"
                 >
                   <option value="All Time">All Time</option>

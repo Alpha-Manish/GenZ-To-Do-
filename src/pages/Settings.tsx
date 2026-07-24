@@ -11,6 +11,8 @@ import { useSettings } from '../context/SettingsContext';
 import { Link } from 'react-router-dom';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { Sidebar } from '../components/Sidebar';
+import toast from 'react-hot-toast';
+import { getTasksForUser, clearAllTasks, migrateTasksToCloud } from '../lib/firestore';
 
 export default function Settings() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -21,7 +23,7 @@ export default function Settings() {
   const { productivity, setProductivity, notifications, setNotifications } = useSettings();
 
   const [avatar, setAvatar] = useState(() => localStorage.getItem('genz_user_avatar') || '');
-
+  const [fullName, setFullName] = useState(() => localStorage.getItem('genz_user_name') || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -35,9 +37,14 @@ export default function Settings() {
     { id: 'about', label: 'About', icon: Info },
   ];
 
-  const handleExport = () => {
+  const handleExport = async () => {
+    if (!currentUser) {
+      toast.error('You must be logged in to export tasks.');
+      return;
+    }
     try {
-      const data = localStorage.getItem('genz_tasks') || '[]';
+      const tasks = await getTasksForUser(currentUser.uid);
+      const data = JSON.stringify(tasks, null, 2);
       const blob = new Blob([data], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -55,16 +62,15 @@ export default function Settings() {
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !currentUser) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const content = event.target?.result as string;
         const parsed = JSON.parse(content);
         if (Array.isArray(parsed)) {
-          localStorage.setItem('genz_tasks', JSON.stringify(parsed));
-          window.dispatchEvent(new Event('tasks_updated'));
+          await migrateTasksToCloud(currentUser.uid, parsed);
           toast.success('Tasks imported successfully!');
         } else {
           toast.error('Invalid backup file format.');
@@ -77,11 +83,15 @@ export default function Settings() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleClearData = () => {
-    if (window.confirm('Are you sure you want to delete ALL tasks? This cannot be undone.')) {
-      localStorage.setItem('genz_tasks', '[]');
-      window.dispatchEvent(new Event('tasks_updated'));
-      toast.success('All tasks cleared.');
+  const handleClearData = async () => {
+    if (!currentUser) return;
+    if (window.confirm('Are you sure you want to delete ALL tasks from the cloud? This cannot be undone.')) {
+      try {
+        await clearAllTasks(currentUser.uid);
+        toast.success('All tasks cleared.');
+      } catch (e) {
+        toast.error('Failed to clear tasks.');
+      }
     }
   };
 
@@ -138,7 +148,18 @@ export default function Settings() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Full Name</label>
-                <input type="text" defaultValue="GenZ User" className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                <input 
+                  type="text" 
+                  value={fullName}
+                  onChange={(e) => {
+                    const newName = e.target.value;
+                    setFullName(newName);
+                    localStorage.setItem('genz_user_name', newName);
+                    window.dispatchEvent(new Event('name_updated'));
+                  }}
+                  placeholder="Enter your name" 
+                  className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-violet-500" 
+                />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Email Address</label>
@@ -413,7 +434,7 @@ export default function Settings() {
 
 
   return (
-    <div className="min-h-screen flex overflow-hidden w-full">
+    <div className="h-screen flex overflow-hidden w-full">
       {/* Mobile Sidebar Overlay */}
       <AnimatePresence>
         {sidebarOpen && (

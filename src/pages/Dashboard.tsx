@@ -24,16 +24,7 @@ import { Sidebar } from '../components/Sidebar';
 import { AIAssistant } from '../components/AIAssistant';
 import toast from 'react-hot-toast';
 import { markTaskCompletedToday } from '../utils/streakUtils';
-
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  priority: 'low' | 'medium' | 'high';
-  category: string;
-  dueDate: string;
-  completed: boolean;
-}
+import { Task, addTask, updateTask, deleteTask, subscribeToTasks, getUserStats, updateUserStats, migrateTasksToCloud } from '../lib/firestore';
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -43,66 +34,58 @@ export default function Dashboard() {
   const state = location.state as { filterDate?: string; filterStatus?: 'completed' | 'pending' } | null;
   
   // Local State
-  const [tasks, setTasks] = useState<Task[]>(() => {
-    try {
-      const saved = localStorage.getItem('genz_tasks');
-      return saved ? JSON.parse(saved) : [];
-    } catch (error) {
-      console.error('Failed to load tasks:', error);
-      return [];
-    }
-  });
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Persist Tasks
-  useEffect(() => {
-    try {
-      localStorage.setItem('genz_tasks', JSON.stringify(tasks));
-    } catch (error) {
-      console.error('Failed to save tasks:', error);
-    }
-  }, [tasks]);
-  
-  // Listen for tasks updates from Settings (Import/Clear All)
-  useEffect(() => {
-    const handleSync = () => {
-      try {
-        const saved = localStorage.getItem('genz_tasks');
-        setTasks(saved ? JSON.parse(saved) : []);
-      } catch (error) {
-        console.error('Failed to sync tasks:', error);
-      }
-    };
-    window.addEventListener('tasks_updated', handleSync);
-    return () => window.removeEventListener('tasks_updated', handleSync);
-  }, []);
-
-  // Form State
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  
-  // Form Fields
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
-  const [category, setCategory] = useState('Personal');
-  const [dueDate, setDueDate] = useState('');
-
-  // Category Tabs
+  // Custom Categories
   const [activeCategory, setActiveCategory] = useState<string>('All');
-  const [customCategories, setCustomCategories] = useState<string[]>(() => {
-    const saved = localStorage.getItem('genz_custom_categories');
-    return saved ? JSON.parse(saved) : ['Personal', 'Work', 'Technical Work', 'Long Term Goal'];
-  });
+  const [customCategories, setCustomCategories] = useState<string[]>(['Personal', 'Work', 'Technical Work', 'Long Term Goal']);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    // Load stats and custom categories
+    getUserStats(currentUser.uid).then(stats => {
+      setCustomCategories(stats.customCategories);
+      
+      // Local to Cloud Migration Logic
+      const localTasksData = localStorage.getItem('genz_tasks');
+      const migrated = localStorage.getItem(`migrated_${currentUser.uid}`);
+      if (localTasksData && !migrated) {
+        try {
+          const localTasks = JSON.parse(localTasksData);
+          if (localTasks.length > 0) {
+            migrateTasksToCloud(currentUser.uid, localTasks).then(() => {
+              localStorage.setItem(`migrated_${currentUser.uid}`, 'true');
+              toast.success('Successfully migrated your local tasks to the cloud! ☁️');
+            });
+          } else {
+            localStorage.setItem(`migrated_${currentUser.uid}`, 'true');
+          }
+        } catch (e) {
+          console.error('Migration failed', e);
+        }
+      }
+    });
+
+    const unsubscribe = subscribeToTasks(currentUser.uid, (fetchedTasks) => {
+      setTasks(fetchedTasks);
+      setIsLoading(false);
+    });
+    
+    return () => unsubscribe();
+  }, [currentUser]);
   
   const allCategoriesMap = new Map<string, string>();
   customCategories.forEach(c => allCategoriesMap.set(c.toLowerCase(), c));
   tasks.forEach(t => {
-    if (t.category && !allCategoriesMap.has(t.category.toLowerCase())) {
-      const niceCase = t.category.charAt(0).toUpperCase() + t.category.slice(1);
-      allCategoriesMap.set(t.category.toLowerCase(), niceCase);
+    if (t.category) {
+      const trimmed = t.category.trim();
+      const lower = trimmed.toLowerCase();
+      if (!allCategoriesMap.has(lower)) {
+        const niceCase = trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+        allCategoriesMap.set(lower, niceCase);
+      }
     }
   });
   const categories = ['All', ...Array.from(allCategoriesMap.values())];
@@ -115,7 +98,9 @@ export default function Dashboard() {
       if (!existing) {
         const updated = [...customCategories, trimmed];
         setCustomCategories(updated);
-        localStorage.setItem('genz_custom_categories', JSON.stringify(updated));
+        if (currentUser) {
+          updateUserStats(currentUser.uid, { customCategories: updated });
+        }
         setActiveCategory(trimmed);
       } else {
         setActiveCategory(existing);
@@ -128,7 +113,9 @@ export default function Dashboard() {
   const deleteCategory = (cat: string) => {
     const updated = customCategories.filter(c => c !== cat);
     setCustomCategories(updated);
-    localStorage.setItem('genz_custom_categories', JSON.stringify(updated));
+    if (currentUser) {
+      updateUserStats(currentUser.uid, { customCategories: updated });
+    }
     if (activeCategory === cat) setActiveCategory('All');
     toast.success(`Category "${cat}" deleted`);
   };
@@ -148,6 +135,19 @@ export default function Dashboard() {
     }
   }, [state]);
 
+  // Form State
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  
+  // Form Fields
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
+  const [category, setCategory] = useState('Personal');
+  const [dueDate, setDueDate] = useState('');
+
   // Notifications
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [hasUnread, setHasUnread] = useState(() => {
@@ -157,14 +157,6 @@ export default function Dashboard() {
     { id: 1, title: 'Welcome to GenZ To-Do!', time: 'Just now', read: false },
     { id: 2, title: 'Complete your pending tasks today.', time: '2 hours ago', read: false },
   ];
-
-  // Simulate loading state
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, []);
 
   const resetForm = () => {
     setTitle('');
@@ -192,45 +184,47 @@ export default function Dashboard() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || !currentUser) return;
 
-    if (editingTask) {
-      setTasks(tasks.map(t => t.id === editingTask.id ? {
-        ...t, title, description, priority, category, dueDate
-      } : t));
-      toast.success('Task updated successfully!');
+    if (editingTask && editingTask.id) {
+      updateTask(editingTask.id, {
+        title, description, priority, category, dueDate
+      }).then(() => {
+        toast.success('Task updated successfully!');
+      });
     } else {
-      const newTask: Task = {
-        id: Date.now().toString(),
+      addTask({
         title,
         description,
         priority,
         category,
         dueDate,
         completed: false,
-      };
-      setTasks([newTask, ...tasks]);
-      toast.success('Task created successfully! 🚀');
+        userId: currentUser.uid
+      }).then(() => {
+        toast.success('Task created successfully! 🚀');
+      });
     }
     resetForm();
   };
 
   const handleDelete = (id: string) => {
-    setTasks(tasks.filter(t => t.id !== id));
-    toast.success('Task deleted');
+    deleteTask(id).then(() => {
+      toast.success('Task deleted');
+    });
   };
 
   const toggleComplete = (id: string) => {
-    setTasks(tasks.map(t => {
-      if (t.id === id) {
-        if (!t.completed) {
-          toast.success('Task completed! 🎉');
-          markTaskCompletedToday();
+    const task = tasks.find(t => t.id === id);
+    if (task) {
+      if (!task.completed) {
+        toast.success('Task completed! 🎉');
+        if (currentUser) {
+           markTaskCompletedToday(currentUser.uid);
         }
-        return { ...t, completed: !t.completed };
       }
-      return t;
-    }));
+      updateTask(id, { completed: !task.completed });
+    }
   };
 
   const priorityWeight: Record<string, number> = { high: 3, medium: 2, low: 1 };
@@ -276,7 +270,7 @@ export default function Dashboard() {
 
 
   return (
-    <div className="min-h-screen bg-[var(--background)] flex overflow-hidden">
+    <div className="h-screen bg-[var(--background)] flex overflow-hidden">
       {/* Mobile Sidebar Overlay */}
       <AnimatePresence>
         {sidebarOpen && (

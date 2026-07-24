@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, Flame } from 'lucide-react';
+import { Menu, Activity } from 'lucide-react';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { StreakWidget } from '../components/StreakWidget';
 import { Sidebar } from '../components/Sidebar';
@@ -27,7 +27,7 @@ export default function Streak() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[var(--background)] flex overflow-hidden">
+    <div className="h-screen bg-[var(--background)] flex overflow-hidden">
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
@@ -39,7 +39,7 @@ export default function Streak() {
             >
               <Menu size={24} />
             </button>
-            <h1 className="text-xl font-bold gradient-text hidden sm:block">Productivity Streak</h1>
+            <h1 className="text-xl font-bold gradient-text hidden sm:block">Activity Graph</h1>
           </div>
           
           <div className="flex items-center space-x-4">
@@ -52,10 +52,10 @@ export default function Streak() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
                 <h2 className="text-2xl font-bold text-[var(--foreground)] flex items-center gap-2">
-                  <Flame className="text-orange-500" />
-                  Your Streak
+                  <Activity className="text-violet-500" />
+                  Your Activity
                 </h2>
-                <p className="text-gray-500 dark:text-gray-400 mt-1">Keep the momentum going by completing tasks every day.</p>
+                <p className="text-gray-500 dark:text-gray-400 mt-1">Track your daily app usage over time.</p>
               </div>
             </div>
 

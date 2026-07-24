@@ -26,7 +26,7 @@ export default function Habits() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[var(--background)] flex overflow-hidden">
+    <div className="h-screen bg-[var(--background)] flex overflow-hidden">
       {/* Mobile Sidebar Overlay */}
       <AnimatePresence>
         {sidebarOpen && (

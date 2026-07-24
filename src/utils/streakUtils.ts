@@ -1,3 +1,5 @@
+import { getUserStats, updateUserStats } from '../lib/firestore';
+
 export interface StreakData {
   activeDates: string[];
   longestStreak: number;
@@ -50,28 +52,24 @@ export function calculateMaxStreak(dates: string[]): number {
   return maxTemp;
 }
 
-export function getStreakData(): StreakData {
+export async function getStreakData(userId: string): Promise<StreakData> {
   try {
-    const saved = localStorage.getItem('genz_streak_data');
-    if (saved) return JSON.parse(saved);
-  } catch (e) {}
-  return { activeDates: [], longestStreak: 0 };
+    const stats = await getUserStats(userId);
+    const activeDates = stats.activeDates || [];
+    const max = calculateMaxStreak(activeDates);
+    return { activeDates, longestStreak: max };
+  } catch (e) {
+    return { activeDates: [], longestStreak: 0 };
+  }
 }
 
-export function markTaskCompletedToday(): void {
-  const data = getStreakData();
+export async function markTaskCompletedToday(userId: string): Promise<void> {
+  const data = await getStreakData(userId);
   const todayStr = new Date().toISOString().split('T')[0];
   
   if (!data.activeDates.includes(todayStr)) {
     data.activeDates = [...data.activeDates, todayStr].sort();
-    
-    const current = calculateCurrentStreak(data.activeDates);
-    const max = calculateMaxStreak(data.activeDates);
-    const longest = Math.max(data.longestStreak, current, max);
-    
-    data.longestStreak = longest;
-    
-    localStorage.setItem('genz_streak_data', JSON.stringify(data));
+    await updateUserStats(userId, { activeDates: data.activeDates });
     window.dispatchEvent(new Event('streak_updated'));
   }
 }

@@ -9,7 +9,8 @@ import {
   BarChart2,
   TrendingUp,
   Award,
-  Target
+  Target,
+  PieChart as PieChartIcon
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -142,7 +143,7 @@ export default function Analytics() {
   const COLORS = ['#0ea5e9', '#f43f5e', '#10b981', '#eab308', '#3b82f6', '#ec4899', '#14b8a6'];
 
   return (
-    <div className="min-h-screen bg-[var(--background)] flex overflow-hidden">
+    <div className="h-screen bg-[var(--background)] flex overflow-hidden">
       {/* Mobile Sidebar Overlay */}
       <AnimatePresence>
         {sidebarOpen && (
@@ -297,7 +298,7 @@ export default function Analytics() {
                             fill="#8b5cf6" 
                             radius={[4, 4, 0, 0]} 
                             barSize={12} 
-                            onClick={(data) => {
+                            onClick={(data: any) => {
                               if (data && data.date) {
                                 navigate('/dashboard', { state: { filterDate: data.date, filterStatus: 'completed' } });
                               }
@@ -310,7 +311,7 @@ export default function Analytics() {
                             fill="#f97316" 
                             radius={[4, 4, 0, 0]} 
                             barSize={12} 
-                            onClick={(data) => {
+                            onClick={(data: any) => {
                               if (data && data.date) {
                                 navigate('/dashboard', { state: { filterDate: data.date, filterStatus: 'pending' } });
                               }
@@ -327,7 +328,7 @@ export default function Analytics() {
               {/* Category Distribution Chart */}
               <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.6 }} className="glass-card p-6 group hover:shadow-xl hover:shadow-fuchsia-500/10 transition-all duration-300">
                 <h3 className="text-lg font-bold text-[var(--foreground)] mb-6 flex items-center gap-2">
-                  <PieChart className="text-fuchsia-500" size={20} /> Category Distribution
+                  <PieChartIcon className="text-fuchsia-500" size={20} /> Category Distribution
                 </h3>
                 <div className="h-72 w-full flex justify-center items-center relative">
                   {isLoading ? (

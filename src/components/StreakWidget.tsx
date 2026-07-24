@@ -1,117 +1,133 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Flame, Trophy, Star, Medal, Award } from 'lucide-react';
-
-import { getStreakData, calculateCurrentStreak, calculateMaxStreak, StreakData } from '../utils/streakUtils';
+import { Activity } from 'lucide-react';
+import { getStreakData } from '../utils/streakUtils';
+import { useAuth } from '../context/AuthContext';
 
 interface StreakWidgetProps {
-  tasks?: any[]; // Kept for backwards compatibility if passed, but not needed
+  tasks?: any[]; 
 }
 
 export function StreakWidget({ tasks }: StreakWidgetProps) {
-  const [streakData, setStreakData] = useState<StreakData>(getStreakData());
+  const [activeDates, setActiveDates] = useState<Set<string>>(new Set());
+  const { currentUser } = useAuth();
 
   useEffect(() => {
-    const handleStreakSync = () => {
-      setStreakData(getStreakData());
+    if (!currentUser) return;
+
+    const loadDates = async () => {
+      const data = await getStreakData(currentUser.uid);
+      setActiveDates(new Set(data.activeDates));
     };
-    
-    window.addEventListener('storage', handleStreakSync);
-    window.addEventListener('streak_updated', handleStreakSync);
-    
+    loadDates();
+    window.addEventListener('streak_updated', loadDates);
     return () => {
-      window.removeEventListener('storage', handleStreakSync);
-      window.removeEventListener('streak_updated', handleStreakSync);
+      window.removeEventListener('streak_updated', loadDates);
     };
-  }, []);
+  }, [currentUser]);
 
-  const currentStreak = calculateCurrentStreak(streakData.activeDates);
-  const maxTemp = calculateMaxStreak(streakData.activeDates);
-  const longest = Math.max(streakData.longestStreak, currentStreak, maxTemp);
+  const today = new Date();
+  const days: Date[] = [];
+  for (let i = 364; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    days.push(d);
+  }
 
-  const achievements = [
-    { days: 3, title: 'Starter', icon: Star, color: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
-    { days: 7, title: 'Week Warrior', icon: Medal, color: 'text-violet-500', bg: 'bg-violet-500/10', border: 'border-violet-500/20' },
-    { days: 30, title: 'Monthly Master', icon: Trophy, color: 'text-fuchsia-500', bg: 'bg-fuchsia-500/10', border: 'border-fuchsia-500/20' },
-    { days: 100, title: 'Century Club', icon: Award, color: 'text-orange-500', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
-  ];
+  const weeks: Date[][] = [];
+  let currentWeek: Date[] = [];
+  
+  const firstDay = days[0].getDay();
+  for (let i = 0; i < firstDay; i++) {
+    currentWeek.push(null as any);
+  }
 
-  const currentAchievement = achievements.slice().reverse().find(a => longest >= a.days);
-  const nextAchievement = achievements.find(a => longest < a.days);
-  const progressToNext = nextAchievement 
-    ? (longest / nextAchievement.days) * 100 
-    : 100;
+  days.forEach(day => {
+    currentWeek.push(day);
+    if (currentWeek.length === 7) {
+      weeks.push(currentWeek);
+      currentWeek = [];
+    }
+  });
+  if (currentWeek.length > 0) {
+    while (currentWeek.length < 7) {
+      currentWeek.push(null as any);
+    }
+    weeks.push(currentWeek);
+  }
+
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   return (
-    <div className="glass-card p-6 relative overflow-hidden group border border-orange-500/20 flex flex-col h-full min-h-[400px]">
-      <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl -z-10 group-hover:bg-orange-500/20 transition-colors duration-500"></div>
+    <div className="glass-card p-6 relative overflow-hidden group flex flex-col h-full min-h-[400px]">
+      <div className="absolute top-0 right-0 w-32 h-32 bg-violet-500/10 rounded-full blur-3xl -z-10 group-hover:bg-violet-500/20 transition-colors duration-500"></div>
       
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-bold gradient-text flex items-center gap-2">
-          <Flame className="text-orange-500" size={20} />
-          Streak System
+          <Activity className="text-violet-500" size={20} />
+          Activity Graph
         </h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
+          Total active days: <span className="text-[var(--foreground)] font-bold">{activeDates.size}</span>
+        </p>
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center">
-        <motion.div 
-          key={currentStreak}
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="relative flex items-center justify-center mb-4"
-        >
-          <div className="absolute inset-0 bg-orange-500/20 blur-2xl rounded-full"></div>
-          <div className="relative bg-gradient-to-tr from-orange-100 to-amber-50 dark:from-orange-900/40 dark:to-amber-900/40 w-32 h-32 rounded-full flex flex-col items-center justify-center border border-orange-500/30 shadow-[0_0_30px_rgba(249,115,22,0.2)]">
-            <Flame className="text-orange-500 mb-1" size={32} />
-            <span className="text-4xl font-black text-[var(--foreground)] tracking-tighter">
-              {currentStreak}
-            </span>
-            <span className="text-xs font-bold text-orange-600 dark:text-orange-400 uppercase">Days</span>
-          </div>
-        </motion.div>
-
-        <p className="text-sm text-gray-500 dark:text-gray-400 font-medium text-center">
-          Longest Streak: <span className="text-[var(--foreground)] font-bold">{longest} days</span>
-        </p>
-
-        {/* Achievement Badge */}
-        {currentAchievement && (
-          <motion.div 
-            initial={{ y: 10, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            className={`mt-6 px-4 py-2 rounded-xl flex items-center gap-3 border ${currentAchievement.bg} ${currentAchievement.border}`}
-          >
-            <div className={`p-1.5 rounded-lg bg-[var(--background)] ${currentAchievement.color} shadow-sm`}>
-              <currentAchievement.icon size={18} />
+        <div className="w-full overflow-x-auto pb-4 custom-scrollbar">
+          <div className="min-w-max flex flex-col gap-1.5 p-4 rounded-xl bg-gray-50/50 dark:bg-gray-900/30 border border-[var(--card-border)]">
+            <div className="flex text-xs text-gray-500 font-medium ml-8">
+              {weeks.map((week, i) => {
+                const day = week.find(d => d);
+                if (day && day.getDate() <= 7 && i % 4 === 0) {
+                  return (
+                    <div key={i} className="relative" style={{ width: '14px', marginRight: '4px' }}>
+                      <span className="absolute -left-2 top-0 whitespace-nowrap">{months[day.getMonth()]}</span>
+                    </div>
+                  );
+                }
+                return <div key={i} style={{ width: '14px', marginRight: '4px' }}></div>;
+              })}
             </div>
-            <div>
-              <p className={`text-xs font-bold uppercase tracking-wider ${currentAchievement.color}`}>
-                Achievement Unlocked
-              </p>
-              <p className="text-sm font-semibold text-[var(--foreground)]">
-                {currentAchievement.title}
-              </p>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Progress to next */}
-        {nextAchievement && (
-          <div className="w-full mt-6">
-            <div className="flex justify-between text-xs mb-1.5 font-medium">
-              <span className="text-gray-500">Next: {nextAchievement.title}</span>
-              <span className="text-[var(--foreground)]">{longest} / {nextAchievement.days}</span>
-            </div>
-            <div className="h-2 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-              <motion.div 
-                initial={{ width: 0 }}
-                animate={{ width: `${progressToNext}%` }}
-                transition={{ duration: 1, ease: "easeOut" }}
-                className={`h-full rounded-full bg-gradient-to-r from-orange-400 to-amber-500`}
-              />
+            
+            <div className="flex gap-1">
+              <div className="flex flex-col gap-[6px] text-[10px] text-gray-500 font-medium mr-2 justify-between py-1">
+                <span>Sun</span>
+                <span>Mon</span>
+                <span>Tue</span>
+                <span>Wed</span>
+                <span>Thu</span>
+                <span>Fri</span>
+                <span>Sat</span>
+              </div>
+              
+              {weeks.map((week, wIndex) => (
+                <div key={wIndex} className="flex flex-col gap-[6px]">
+                  {week.map((day, dIndex) => {
+                    if (!day) return <div key={dIndex} className="w-3.5 h-3.5 bg-transparent"></div>;
+                    
+                    const dateStr = day.toISOString().split('T')[0];
+                    const isActive = activeDates.has(dateStr);
+                    
+                    return (
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.5 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: (wIndex * 0.01) + (dIndex * 0.005) }}
+                        key={dIndex} 
+                        title={`${dateStr} ${isActive ? '(Active)' : ''}`}
+                        className={`w-3.5 h-3.5 rounded-sm transition-colors duration-300 ${
+                          isActive 
+                            ? 'bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.5)]' 
+                            : 'bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700'
+                        }`}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

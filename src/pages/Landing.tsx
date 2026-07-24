@@ -12,7 +12,8 @@ import {
   Menu,
   X,
   PlayCircle,
-  Star
+  Star,
+  Activity
 } from 'lucide-react';
 
 function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -226,7 +227,7 @@ export default function Landing() {
             { icon: Timer, title: 'Pomodoro Focus Timer', desc: 'Stay in the zone with built-in customizable focus sessions.', path: '/focus' },
             { icon: BarChart3, title: 'Productivity Analytics', desc: 'Understand your work patterns with beautiful, detailed insights.', path: '/analytics' },
             { icon: Sparkles, title: 'AI Task Suggestions', desc: 'Let our AI break down large projects into manageable steps.', path: '/dashboard' },
-            { icon: CheckCircle2, title: 'Streak Tracking', desc: 'Stay motivated by maintaining daily activity streaks.', path: '/streak' },
+            { icon: Activity, title: 'Activity Tracking', desc: 'Track your daily app usage over time.', path: '/streak' },
           ].map((feature, i) => (
             <Link to={feature.path} key={i}>
               <motion.div 

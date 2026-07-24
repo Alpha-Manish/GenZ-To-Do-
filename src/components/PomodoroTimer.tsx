@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Play, Pause, RotateCcw, Coffee, Brain, Timer, Clock } from 'lucide-react';
-
-const FOCUS_TIME = 25 * 60;
-const SHORT_BREAK_TIME = 5 * 60;
-const LONG_BREAK_TIME = 15 * 60;
+import { useSettings } from '../context/SettingsContext';
 
 interface PomodoroState {
   timeLeft: number;
@@ -14,6 +11,11 @@ interface PomodoroState {
 }
 
 export function PomodoroTimer() {
+  const { productivity } = useSettings();
+  const FOCUS_TIME = productivity.pomodoroDuration * 60;
+  const SHORT_BREAK_TIME = productivity.breakDuration * 60;
+  const LONG_BREAK_TIME = 15 * 60;
+
   const [state, setState] = useState<PomodoroState>(() => {
     try {
       const saved = localStorage.getItem('genz_pomodoro');
@@ -35,17 +37,24 @@ export function PomodoroTimer() {
     };
   });
 
-  // Save to local storage on state change
   useEffect(() => {
     localStorage.setItem('genz_pomodoro', JSON.stringify(state));
   }, [state]);
 
+  // Sync timer when settings change
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+    if (!state.isActive) {
+      if (state.mode === 'focus') setState(prev => ({ ...prev, timeLeft: FOCUS_TIME }));
+      else if (state.mode === 'shortBreak') setState(prev => ({ ...prev, timeLeft: SHORT_BREAK_TIME }));
+    }
+  }, [FOCUS_TIME, SHORT_BREAK_TIME]);
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setTimeout> | null = null;
 
     if (state.isActive) {
       if (state.timeLeft > 0) {
-        interval = setInterval(() => {
+        interval = setTimeout(() => {
           setState((prev) => ({ ...prev, timeLeft: prev.timeLeft - 1 }));
         }, 1000);
       } else if (state.timeLeft === 0) {
@@ -64,9 +73,9 @@ export function PomodoroTimer() {
     }
 
     return () => {
-      if (interval) clearInterval(interval);
+      if (interval) clearTimeout(interval);
     };
-  }, [state.isActive, state.timeLeft, state.mode, state.sessionCount]);
+  }, [state.isActive, state.timeLeft, state.mode, state.sessionCount, FOCUS_TIME, SHORT_BREAK_TIME, LONG_BREAK_TIME]);
 
   const toggleTimer = () => {
     setState((prev) => ({ ...prev, isActive: !prev.isActive }));

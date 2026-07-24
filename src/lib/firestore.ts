@@ -66,11 +66,10 @@ export const deleteTask = async (id: string) => {
   }
 };
 
-export const subscribeToTasks = (userId: string, callback: (tasks: Task[]) => void) => {
+export const subscribeToTasks = (userId: string, callback: (tasks: Task[]) => void, onError?: (error: any) => void) => {
   const q = query(
     collection(db, 'tasks'),
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc')
+    where('userId', '==', userId)
   );
 
   return onSnapshot(q, (querySnapshot) => {
@@ -78,7 +77,18 @@ export const subscribeToTasks = (userId: string, callback: (tasks: Task[]) => vo
     querySnapshot.forEach((doc) => {
       tasks.push({ id: doc.id, ...doc.data() } as Task);
     });
+    
+    // Sort client-side to avoid requiring a Firestore composite index
+    tasks.sort((a, b) => {
+      const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+      const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+      return timeB - timeA;
+    });
+    
     callback(tasks);
+  }, (error) => {
+    console.error("Firestore subscribe error:", error);
+    if (onError) onError(error);
   });
 };
 
@@ -86,7 +96,11 @@ export const getUserStats = async (userId: string): Promise<UserStats> => {
   const statsRef = doc(db, 'userStats', userId);
   const snap = await getDoc(statsRef);
   if (snap.exists()) {
-    return snap.data() as UserStats;
+    const data = snap.data();
+    return {
+      activeDates: data.activeDates || [],
+      customCategories: data.customCategories || ['Personal', 'Work', 'Technical Work', 'Long Term Goal']
+    };
   }
   return { activeDates: [], customCategories: ['Personal', 'Work', 'Technical Work', 'Long Term Goal'] };
 };

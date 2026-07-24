@@ -107,6 +107,7 @@ export function StreakWidget({ tasks }: StreakWidgetProps) {
                     
                     const dateStr = day.toISOString().split('T')[0];
                     const isActive = activeDates.has(dateStr);
+                    const tooltipText = `${day.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' })}${isActive ? ' (Active)' : ''}`;
                     
                     return (
                       <motion.div 
@@ -114,7 +115,7 @@ export function StreakWidget({ tasks }: StreakWidgetProps) {
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: (wIndex * 0.01) + (dIndex * 0.005) }}
                         key={dIndex} 
-                        title={`${dateStr} ${isActive ? '(Active)' : ''}`}
+                        title={tooltipText}
                         className={`w-3.5 h-3.5 rounded-sm transition-colors duration-300 ${
                           isActive 
                             ? 'bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.5)]' 

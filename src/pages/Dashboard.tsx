@@ -24,7 +24,8 @@ import { Sidebar } from '../components/Sidebar';
 import { AIAssistant } from '../components/AIAssistant';
 import toast from 'react-hot-toast';
 import { markTaskCompletedToday } from '../utils/streakUtils';
-import { Task, addTask, updateTask, deleteTask, subscribeToTasks, getUserStats, updateUserStats, migrateTasksToCloud } from '../lib/firestore';
+import { addTask, updateTask, deleteTask, subscribeToTasks, getUserStats, updateUserStats, migrateTasksToCloud } from '../lib/firestore';
+import type { Task } from '../lib/firestore';
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -46,31 +47,60 @@ export default function Dashboard() {
     
     // Load stats and custom categories
     getUserStats(currentUser.uid).then(stats => {
-      setCustomCategories(stats.customCategories);
+      setCustomCategories(stats.customCategories || ['Personal', 'Work', 'Technical Work', 'Long Term Goal']);
       
       // Local to Cloud Migration Logic
       const localTasksData = localStorage.getItem('genz_tasks');
       const migrated = localStorage.getItem(`migrated_${currentUser.uid}`);
       if (localTasksData && !migrated) {
+        // Set flag immediately to prevent React StrictMode double execution race condition
+        localStorage.setItem(`migrated_${currentUser.uid}`, 'true');
         try {
           const localTasks = JSON.parse(localTasksData);
           if (localTasks.length > 0) {
             migrateTasksToCloud(currentUser.uid, localTasks).then(() => {
-              localStorage.setItem(`migrated_${currentUser.uid}`, 'true');
               toast.success('Successfully migrated your local tasks to the cloud! ☁️');
             });
-          } else {
-            localStorage.setItem(`migrated_${currentUser.uid}`, 'true');
           }
         } catch (e) {
           console.error('Migration failed', e);
+          // Revert flag on failure
+          localStorage.removeItem(`migrated_${currentUser.uid}`);
         }
       }
+    }).catch(error => {
+      console.error('Failed to load user stats:', error);
     });
 
     const unsubscribe = subscribeToTasks(currentUser.uid, (fetchedTasks) => {
-      setTasks(fetchedTasks);
+      // Auto-cleanup for duplicate tasks caused by previous migration race condition
+      const uniqueTasks: Task[] = [];
+      const duplicates: string[] = [];
+
+      fetchedTasks.forEach(task => {
+        const taskTime = task.createdAt?.toMillis ? task.createdAt.toMillis() : 0;
+        const isDuplicate = uniqueTasks.some(u => {
+          const uTime = u.createdAt?.toMillis ? u.createdAt.toMillis() : 0;
+          return u.title === task.title && Math.abs(uTime - taskTime) < 5000;
+        });
+
+        if (isDuplicate && task.id) {
+          duplicates.push(task.id);
+        } else {
+          uniqueTasks.push(task);
+        }
+      });
+
+      if (duplicates.length > 0) {
+        duplicates.forEach(id => deleteTask(id).catch(console.error));
+      }
+
+      setTasks(uniqueTasks);
       setIsLoading(false);
+    }, (error) => {
+      console.error(error);
+      setIsLoading(false);
+      toast.error('Failed to load tasks. Check Firebase rules.');
     });
     
     return () => unsubscribe();
@@ -519,7 +549,7 @@ export default function Dashboard() {
                       >
                         <div className="flex-1 flex items-start sm:items-center gap-4 min-w-0">
                           <button 
-                            onClick={() => toggleComplete(task.id)}
+                            onClick={() => task.id && toggleComplete(task.id)}
                             className="mt-1 sm:mt-0 flex-shrink-0 text-gray-400 hover:text-violet-500 transition-colors"
                           >
                             {task.completed ? (
@@ -571,7 +601,7 @@ export default function Dashboard() {
                             <Edit2 size={18} />
                           </button>
                           <button 
-                            onClick={() => handleDelete(task.id)}
+                            onClick={() => task.id && handleDelete(task.id)}
                             className="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                             title="Delete"
                           >
